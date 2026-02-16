@@ -1,6 +1,6 @@
 {
-  "name": "KPI",
-  "short_name": "KPI",
+  "name": "KoboToolbox – Bareit",
+  "short_name": "Kobo Bareit",
   "icons": [
     {
       "src": "/android-chrome-192x192.png?v=KFWlhWsGAhxdhtyB",
@@ -13,7 +13,7 @@
       "type": "image/png"
     }
   ],
-  "theme_color": "#2095f3",
+  "theme_color": "#1e7ae5",
   "background_color": "#ffffff",
   "display": "standalone"
 }
