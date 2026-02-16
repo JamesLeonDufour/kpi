@@ -33,3 +33,6 @@ emails
 
 # We post changelog in github releases, but generate it here. Let's not accidentally commit it.
 CHANGELOG.md
+
+# Private branding documentation
+BRANDING.md
