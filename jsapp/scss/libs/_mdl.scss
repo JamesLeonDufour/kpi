@@ -9,7 +9,7 @@ $font_mono: 'Roboto Mono', monospace !default;
 $layout-text-color: colors.$kobo-gray-800 !default;
 $layout-nav-color: colors.$kobo-white !default;
 $layout-header-bg-color: colors.$bareit-blue !default;
-$layout-desktop-header-height: 64px;
+$layout-desktop-header-height: 48px;
 
 @mixin box-shadow {
   box-shadow: 0 0 2px 0 rgba(colors.$kobo-gray-800, 0.06), 0 2px 2px 0 rgba(colors.$kobo-gray-800, 0.12);
