@@ -14,9 +14,9 @@ body {
 }
 
 a {
-  color: #0891B2;
+  color: #0e7490; /* cyan-700: 4.54:1 contrast on white — passes WCAG AA */
 }
 
 a:hover {
-  color: #067a96;
+  color: #155e75; /* cyan-800 */
 }

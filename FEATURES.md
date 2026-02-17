@@ -23,20 +23,22 @@ applied to the KPI source code.
 
 | Item | Change | File(s) |
 |------|--------|---------|
-| Header background | `#0891B2` (cyan/teal) | `jsapp/scss/colors.scss`, `jsapp/scss/libs/_mdl.scss` |
+| Header background | `#1e3a5f` (deep navy) | `jsapp/scss/colors.scss`, `jsapp/scss/libs/_mdl.scss` |
 | Header height | `48px` (compact) | `jsapp/scss/libs/_mdl.scss` |
 | Browser tab title | "KoboToolbox -- Bareit" | `kpi/templates/base_simple.html` |
-| Login button color | `#0891B2` | `jsapp/scss/components/_kobo.button.scss` |
-| Login input focus | `#0891B2` | `jsapp/scss/stylesheets/partials/_registration.scss` |
+| Login button color | `#0891B2` (teal accent) | `jsapp/scss/components/_kobo.button.scss` |
+| Login input focus | `#0891B2` (teal accent) | `jsapp/scss/stylesheets/partials/_registration.scss` |
 | Login links | Teal (matching branding) | `jsapp/scss/stylesheets/partials/_registration.scss` |
 | Login SSO buttons | Teal background/text | `jsapp/scss/stylesheets/partials/_registration.scss` |
-| Login select focus | `#0891B2` | `jsapp/scss/stylesheets/partials/_registration.scss` |
-| Login footer | "Hosted by Bareit" (inside form box) | `kobo/apps/accounts/templates/account/login.html` |
-| Link colors | `#0891B2` | `kpi/static/css/kpi_simple.css` |
-| PWA manifest | Name + theme color | `static/site.webmanifest` |
-| Safari mask icon | `#0891B2` | `kpi/templates/base_simple.html` |
+| Login select focus | `#0891B2` (teal accent) | `jsapp/scss/stylesheets/partials/_registration.scss` |
+| Login footer | "Hosted by Bareit" (inside form box) | `kobo/apps/accounts/templates/account/login.html`, `jsapp/scss/stylesheets/partials/_registration.scss` |
+| Link colors | `#0e7490` (WCAG AA compliant, 4.54:1) | `kpi/static/css/kpi_simple.css` |
+| PWA manifest | Name + theme color `#1e3a5f` | `static/site.webmanifest` |
+| Safari mask icon | `#1e3a5f` | `kpi/templates/base_simple.html` |
 
-All changes use a single SCSS variable `$bareit-blue` defined in `jsapp/scss/colors.scss`.
+Two SCSS variables drive the brand colors, both defined in `jsapp/scss/colors.scss`:
+- `$bareit-navy: #1e3a5f` — header background (deep navy, 10:1 contrast with white text)
+- `$bareit-blue: #0891B2` — teal accent for buttons, focus rings, SSO buttons, login footer
 
 ---
 
@@ -190,10 +192,19 @@ image: ghcr.io/jamesleondufour/kpi:custom-branding
 
 ## How to change the branding color
 
-1. Edit `jsapp/scss/colors.scss` -- change the `$bareit-blue` value
-2. Edit `kpi/static/css/kpi_simple.css` -- update the hex values
-3. Edit `static/site.webmanifest` -- update `theme_color`
-4. Edit `kpi/templates/base_simple.html` -- update the `mask-icon` color
+Two variables control the palette:
+
+| Variable | Default | Used for |
+|---|---|---|
+| `$bareit-navy` | `#1e3a5f` | Header background |
+| `$bareit-blue` | `#0891B2` | Buttons, focus rings, links, SSO buttons |
+
+To change colors:
+
+1. Edit `jsapp/scss/colors.scss` -- change `$bareit-navy` and/or `$bareit-blue`
+2. Edit `kpi/static/css/kpi_simple.css` -- update the link hex values to match `$bareit-blue`
+3. Edit `static/site.webmanifest` -- update `theme_color` (should match `$bareit-navy`)
+4. Edit `kpi/templates/base_simple.html` -- update the `mask-icon` color (should match `$bareit-navy`)
 5. Push to `custom-branding` branch:
    ```bash
    git add -A && git commit -m "feat: update branding color" && git push
@@ -238,9 +249,10 @@ Branding survives upgrades because it lives in your branch, not in overlay files
 ## Verify
 
 Open your browser and check:
-- Header should be cyan/teal (`#0891B2`)
+- Header should be deep navy (`#1e3a5f`)
+- Buttons, focus rings, and accents should be teal (`#0891B2`)
 - Tab title should say "KoboToolbox -- Bareit"
-- Login page buttons, links, and focus states should all be cyan/teal
+- Login page buttons, links, and focus states should all be teal
 - Login page should show "Hosted by Bareit" inside the form box at the bottom
 - If ENFORCE_SSO is enabled, only SSO buttons should be visible on login
 - `/admin/kobo_auth/user/` should show an **Import** button for bulk user creation

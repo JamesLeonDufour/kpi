@@ -390,6 +390,19 @@ form.registration--login > p > span.helptext {
   background-color: rgba(colors.$kobo-mid-red, 0.075);
 }
 
+.registration__hosted-by {
+  text-align: center;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid rgba(colors.$kobo-white, 0.1);
+  font-size: 13px;
+  color: rgba(colors.$kobo-white, 0.7);
+
+  strong {
+    color: colors.$bareit-blue;
+  }
+}
+
 .registration__credit {
   position: absolute;
   bottom: 5px;
