@@ -1,11 +1,25 @@
-# Bareit Custom Branding for KoboToolbox
+# Bareit Custom KoboToolbox -- Features & Documentation
 
-This branch (`custom-branding`) contains Bareit-specific branding changes
-applied directly to the KPI source code. No overlay images or CSS hacks needed.
+This branch (`custom-branding`) contains all Bareit-specific customizations
+applied to the KPI source code.
 
 ---
 
-## What's customized
+## Table of Contents
+
+1. [Branding](#branding)
+2. [Enforce SSO](#enforce-sso-hide-usernamepassword-login)
+3. [Bulk User Import](#bulk-user-import)
+4. [CI/CD & Deployment](#cicd-github-actions-builds-the-docker-image-automatically)
+5. [Local Build](#how-to-build-locally-optional)
+6. [Docker Compose Override](#docker-compose-override-file)
+7. [Changing the Branding Color](#how-to-change-the-branding-color)
+8. [Upgrading KoboToolbox](#upgrading-kobotoolbox)
+9. [Verification](#verify)
+
+---
+
+## Branding
 
 | Item | Change | File(s) |
 |------|--------|---------|
@@ -23,6 +37,74 @@ applied directly to the KPI source code. No overlay images or CSS hacks needed.
 | Safari mask icon | `#0891B2` | `kpi/templates/base_simple.html` |
 
 All changes use a single SCSS variable `$bareit-blue` defined in `jsapp/scss/colors.scss`.
+
+---
+
+## Enforce SSO (hide username/password login)
+
+A runtime toggle called **ENFORCE_SSO** is available in Django admin via
+**Constance > Config** (under "General Options").
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `ENFORCE_SSO` | `False` | When `True`, hides the username/password fields, login button, "Create an account", and "Forgot password?" links. Only the SSO buttons remain on the login page. |
+
+**Files:** `kobo/settings/base.py`, `kobo/apps/accounts/templates/account/login.html`
+
+To enable it:
+
+1. Go to **Django Admin > Constance > Config**
+2. Check **ENFORCE_SSO**
+3. Save
+
+No rebuild or redeployment is needed -- the change takes effect immediately.
+
+---
+
+## Bulk User Import
+
+Admins can bulk-create user accounts by uploading a CSV or Excel file through
+the Django admin interface.
+
+**Files:** `hub/admin/extend_user.py`
+
+### How it works
+
+- Uses `django-import-export` (already installed) to add an **Import** button
+  to the User admin at `/admin/kobo_auth/user/`.
+- A `UserImportResource` class handles password hashing and allauth
+  `EmailAddress` creation automatically.
+
+### Expected CSV format
+
+```
+username,email,password
+john,john@example.com,SecurePass123!
+jane,jane@example.com,AnotherPass456!
+```
+
+### What happens on import
+
+1. Each row creates (or updates) a User record.
+2. The plaintext password is hashed via `set_password()`.
+3. A verified, primary `EmailAddress` (allauth) is created for each user with
+   an email.
+4. Existing `post_save` signals automatically handle:
+   - Auth token creation
+   - Organization creation
+   - Default model-level permissions
+   - KoBoCAT user sync + UserProfile creation
+
+### How to use
+
+1. Log in to Django admin at `/admin/kobo_auth/user/`
+2. Click the **Import** button
+3. Upload a CSV with `username`, `email`, `password` columns
+4. Preview the import (dry run)
+5. Confirm the import
+6. Verify users appear in the user list with correct emails
+7. Check `/admin/account/emailaddress/` -- each imported user should have a
+   verified, primary email
 
 ---
 
@@ -156,3 +238,5 @@ Open your browser and check:
 - Tab title should say "KoboToolbox -- Bareit"
 - Login page buttons, links, and focus states should all be cyan/teal
 - Login page should show "Hosted by Bareit" inside the form box at the bottom
+- If ENFORCE_SSO is enabled, only SSO buttons should be visible on login
+- `/admin/kobo_auth/user/` should show an **Import** button for bulk user creation
