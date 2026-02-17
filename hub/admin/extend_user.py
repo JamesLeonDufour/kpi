@@ -13,6 +13,8 @@ from django.forms import CharField
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
 
 from kobo.apps.accounts.mfa.models import MfaMethodsWrapper
 from kobo.apps.accounts.validators import (
@@ -20,6 +22,7 @@ from kobo.apps.accounts.validators import (
     USERNAME_MAX_LENGTH,
     username_validators,
 )
+from kobo.apps.kobo_auth.shortcuts import User
 from kobo.apps.mass_emails.user_queries import get_inactive_users
 from kobo.apps.openrosa.apps.logger.models import MonthlyXFormSubmissionCounter
 from kobo.apps.organizations.models import OrganizationUser
@@ -143,7 +146,41 @@ class InactiveUsersAsOfFilter(SimpleListFilter):
         return queryset.filter(pk__in=inactive_qs.values_list('pk', flat=True))
 
 
-class ExtendedUserAdmin(AdvancedSearchMixin, UserAdmin):
+class UserImportResource(resources.ModelResource):
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'password')
+        import_id_fields = ('username',)
+
+    def before_import_row(self, row, **kwargs):
+        if not row.get('username') or not row.get('password'):
+            raise ValueError('username and password are required')
+
+    def after_save_instance(self, instance, row, **kwargs):
+        if not kwargs.get('dry_run'):
+            instance.set_password(row.get('password', ''))
+            instance.save(update_fields=['password'])
+
+    def after_import(self, dataset, result, **kwargs):
+        if kwargs.get('dry_run'):
+            return
+        from allauth.account.models import EmailAddress
+
+        for row_result in result.rows:
+            if (
+                row_result.import_type in ('new', 'update')
+                and row_result.instance
+            ):
+                user = row_result.instance
+                if user.email:
+                    EmailAddress.objects.update_or_create(
+                        user=user,
+                        email=user.email,
+                        defaults={'verified': True, 'primary': True},
+                    )
+
+
+class ExtendedUserAdmin(AdvancedSearchMixin, ImportExportModelAdmin, UserAdmin):
     """
     Deleting users used to a two-step process since KPI and KoBoCAT
     shared the same database, but it's not the case anymore.
@@ -160,6 +197,7 @@ class ExtendedUserAdmin(AdvancedSearchMixin, UserAdmin):
     permission
     """
 
+    resource_classes = [UserImportResource]
     form = UserChangeForm
     add_form = UserCreationForm
     inlines = [OrgInline]
