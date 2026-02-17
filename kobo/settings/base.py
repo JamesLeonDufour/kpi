@@ -197,6 +197,11 @@ CONSTANCE_CONFIG = {
         True,
         'Allow new users to register accounts for themselves',
     ),
+    'ENFORCE_SSO': (
+        False,
+        'Hide the username/password login form and only allow SSO login',
+        bool,
+    ),
     'REGISTRATION_ALLOWED_EMAIL_DOMAINS': (
         '',
         'Email domains allowed to register new accounts, one per line, '
@@ -707,6 +712,7 @@ CONSTANCE_ADDITIONAL_FIELDS = {
 CONSTANCE_CONFIG_FIELDSETS = {
     'General Options': (
         'REGISTRATION_OPEN',
+        'ENFORCE_SSO',
         'REGISTRATION_ALLOWED_EMAIL_DOMAINS',
         'REGISTRATION_DOMAIN_NOT_ALLOWED_ERROR_MESSAGE',
         'REGISTRATION_BLACKLIST_EMAIL_DOMAINS',

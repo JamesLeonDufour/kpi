@@ -13,34 +13,36 @@
 
     {% csrf_token %}
 
-    {# Username and Password #}
-    {{ form.as_p }}
+    {% if not config.ENFORCE_SSO %}
+      {# Username and Password #}
+      {{ form.as_p }}
 
-    {% if redirect_field_value %}
-      <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}"/>
-    {% endif %}
-
-    {# Login Button #}
-    <button
-      type="submit"
-      name="Login"
-      class="kobo-button kobo-button--blue kobo-button--fullwidth"
-    >
-      {% trans "Login" %}
-    </button>
-
-    {# Create an account, Forgot Password? #}
-    <div class="registration__create-or-forgot">
-      {% if config.REGISTRATION_OPEN %}
-        <a href="{{ signup_url }}" class="registration__create-account">
-          {% trans "Create an account" %}
-        </a>
+      {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}"/>
       {% endif %}
 
-      <a href="{% url 'account_reset_password' %}" class="registration__forgot-password">
-        {% trans "Forgot password?" %}
-      </a>
-    </div>
+      {# Login Button #}
+      <button
+        type="submit"
+        name="Login"
+        class="kobo-button kobo-button--blue kobo-button--fullwidth"
+      >
+        {% trans "Login" %}
+      </button>
+
+      {# Create an account, Forgot Password? #}
+      <div class="registration__create-or-forgot">
+        {% if config.REGISTRATION_OPEN %}
+          <a href="{{ signup_url }}" class="registration__create-account">
+            {% trans "Create an account" %}
+          </a>
+        {% endif %}
+
+        <a href="{% url 'account_reset_password' %}" class="registration__forgot-password">
+          {% trans "Forgot password?" %}
+        </a>
+      </div>
+    {% endif %}
 
     {# SSO section #}
     {% get_social_apps as social_apps %}
