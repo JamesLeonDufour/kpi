@@ -151,8 +151,19 @@ class UserImportResource(resources.ModelResource):
         model = User
         fields = ('username', 'email', 'password')
         import_id_fields = ('username',)
+        store_instance = True
+
+    def before_import(self, dataset, **kwargs):
+        # Strip BOM from headers (Excel saves CSV with BOM prefix)
+        if dataset.headers:
+            dataset.headers = [
+                h.lstrip('\ufeff').strip() for h in dataset.headers
+            ]
 
     def before_import_row(self, row, **kwargs):
+        # Strip BOM/whitespace from keys in case of per-row issues
+        cleaned = {k.lstrip('\ufeff').strip(): v for k, v in row.items()}
+        row.update(cleaned)
         if not row.get('username') or not row.get('password'):
             raise ValueError('username and password are required')
 
