@@ -9,15 +9,27 @@
 // ==========================================================================
 
 .registration__bg {
-  background: url('../img/signup_photo.jpg');
-  background-size: cover;
-  background-repeat: none;
+  background: url('../img/signup_photo.jpg') center / cover no-repeat;
   width: 100%;
   min-height: 100%;
   position: relative;
   color: colors.$kobo-gray-200;
   padding: 20px;
   padding-bottom: 5px;
+
+  // Radial vignette — darkens edges to pull focus toward the card
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.15) 0%, rgba(0, 0, 0, 0.62) 100%);
+    pointer-events: none;
+  }
+
+  // All direct children sit above the vignette (paint order: ::before first, then children)
+  > * {
+    position: relative;
+  }
 
   form.language-switcher {
     margin: 0 auto;
@@ -29,17 +41,26 @@
   }
 
   form.registration,
- section.registration {
+  section.registration {
     margin: 0 auto;
     position: relative;
     max-width: 400px;
-    background: rgba(colors.$kobo-gray-800, 0.9);
-    padding: 20px 30px;
-    border-radius: 10px;
+    background: rgba(12, 18, 32, 0.91);
+    backdrop-filter: blur(14px) saturate(0.85);
+    -webkit-backdrop-filter: blur(14px) saturate(0.85);
+    border: 1px solid rgba(colors.$kobo-white, 0.07);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.52);
+    padding: 28px 30px;
+    border-radius: 14px;
 
     label {
       display: inline-block;
-      margin-bottom: 2px;
+      margin-bottom: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: rgba(colors.$kobo-white, 0.52);
     }
 
     a {
@@ -107,15 +128,11 @@
 
       // Login page variant
       &.registration__sso--login {
-        h2 {
-          margin-top: 20px;
-          font-size: variables.$base-font-size;
-          text-align: center;
-        }
-
         p {
-          font-size: 0.8em;
+          font-size: 12px;
           text-align: center;
+          color: rgba(colors.$kobo-white, 0.45);
+          margin: 0 0 14px;
         }
       }
 
@@ -139,18 +156,28 @@
       }
     }
 
-    // Special button variant only used for SSO
+    // Special button variant only used for SSO — outlined ghost on dark card
     .kobo-button.kobo-button--sso {
-      background-color: colors.$kobo-bg-teal;
-      color: colors.$kobo-dark-teal;
+      background-color: rgba(colors.$bareit-blue, 0.1);
+      border: 1.5px solid rgba(colors.$bareit-blue, 0.4);
+      color: colors.$kobo-light-teal;
+      min-height: 44px;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
 
-      &.btn-danger {
-        background-color: colors.$kobo-mid-red;
-        color: colors.$kobo-white;
+      &:hover {
+        background-color: rgba(colors.$bareit-blue, 0.2);
+        border-color: rgba(colors.$bareit-blue, 0.65);
       }
 
-      &:focus {
-        outline-offset: 0;
+      &.btn-danger {
+        background-color: rgba(colors.$kobo-mid-red, 0.12);
+        border-color: rgba(colors.$kobo-mid-red, 0.45);
+        color: colors.$kobo-mid-red;
+      }
+
+      &:focus-visible {
+        outline: 2px solid colors.$bareit-blue;
+        outline-offset: 3px;
       }
     }
   }
@@ -187,7 +214,7 @@
   input[type='email'],
   input[type='url'],
   select {
-    color: mdl.$layout-text-color;
+    color: colors.$kobo-white;
   }
 
   p.help {
@@ -220,21 +247,27 @@
 .registration select {
   width: 100%;
   display: block;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border: none;
   border-radius: 6px;
   font-size: variables.$base-font-size;
   border-bottom: 3px solid transparent;
-  background-color: colors.$kobo-light-storm;
+  background-color: rgba(255, 255, 255, 0.10);
+  color: colors.$kobo-white;
+  transition: border-bottom-color 0.15s ease, background-color 0.15s ease;
+
+  &::placeholder {
+    color: rgba(colors.$kobo-white, 0.35);
+  }
 
   &:focus {
     border-bottom-color: colors.$bareit-blue;
-    background-color: colors.$kobo-white;
+    background-color: rgba(255, 255, 255, 0.17);
+    outline: none;
   }
 
   &[readonly] {
-    // Dim readonly fields
-    background-color: rgba(colors.$kobo-light-storm, 0.7);
+    background-color: rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -258,10 +291,13 @@
 }
 
 .registration button[type='submit'] {
-  margin-top: 28px;
+  margin-top: 18px;
+  min-height: 44px;
+  transition: opacity 0.15s ease;
 
-  &:focus {
-    outline: 2px solid colors.$kobo-light-storm;
+  &:focus-visible {
+    outline: 3px solid colors.$bareit-blue;
+    outline-offset: 3px;
   }
 }
 
@@ -315,9 +351,14 @@
   }
 
   ul.errorlist {
-    padding: 0;
+    list-style: none;
+    padding: 7px 10px;
     color: colors.$kobo-mid-red;
-    margin: 8px 0;
+    margin: 6px 0;
+    background-color: rgba(colors.$kobo-mid-red, 0.10);
+    border-left: 3px solid colors.$kobo-mid-red;
+    border-radius: 4px;
+    font-size: 12px;
   }
 }
 
@@ -342,12 +383,13 @@ form.registration--login > p > span.helptext {
 }
 
 .registration__create-or-forgot {
-  margin: 20px 0 0;
+  margin: 14px 0 0;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .registration__legal {
@@ -402,6 +444,93 @@ form.registration--login > p > span.helptext {
     color: colors.$bareit-blue;
   }
 }
+
+// ── Login-specific hierarchy styles ──────────────────────────────────────────
+
+// "Forgot password?" — always pushed right, visually muted
+.registration .registration__forgot-password {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(colors.$kobo-white, 0.45) !important;
+  text-decoration: none !important;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(colors.$kobo-white, 0.8) !important;
+  }
+}
+
+// "Create an account" — secondary emphasis
+.registration .registration__create-account {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+// "or" divider between password login and SSO
+.registration__divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 14px;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(colors.$kobo-white, 0.12);
+  }
+
+  span {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(colors.$kobo-white, 0.35);
+  }
+}
+
+// Password show/hide wrapper (injected by JS)
+.registration__password-wrapper {
+  position: relative;
+  display: block;
+
+  input {
+    padding-right: 44px !important;
+  }
+}
+
+.registration__password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: rgba(colors.$kobo-white, 0.4);
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+
+  &:hover {
+    color: rgba(colors.$kobo-white, 0.85);
+  }
+
+  &:focus-visible {
+    outline: 2px solid colors.$bareit-blue;
+    outline-offset: 1px;
+    color: rgba(colors.$kobo-white, 0.85);
+  }
+}
+
+// ── End login-specific ────────────────────────────────────────────────────────
 
 .registration__credit {
   position: absolute;
