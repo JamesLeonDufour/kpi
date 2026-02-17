@@ -1,3 +1,6 @@
+# Private Bareit documentation — kept local only
+FEATURES.md
+
 db.sqlite3
 *.pyc
 exported_survey_drafts
