@@ -38,12 +38,12 @@ export const themeKobo = createTheme({
       '#000',
       '#000',
       '#000',
-      'hsl(207, 77%, 32%)', // #135991,
-      'hsl(207, 77%, 43%)', // #1977c2,
-      'hsl(207, 90%, 54%)', // #2095f3,
-      'hsl(207, 90%, 77%)', // #8fcaf9, (previously $kobo-alt-blue)
-      'hsl(207, 88%, 91%)', // #d2e9fc, (previously $kobo-mid-blue)
-      'hsl(206, 84%, 95%)', // #e8f4fd, (previously $kobo-light-blue)
+      'hsl(192, 91%, 25%)', // #065a72, $kobo-dark-blue (Bareit)
+      'hsl(192, 91%, 31%)', // #07758f, $kobo-hover-blue (Bareit)
+      'hsl(192, 91%, 37%)', // #0891B2, $kobo-blue (Bareit)
+      'hsl(192, 50%, 70%)', // #82c5d4, $kobo-mid-blue (Bareit)
+      'hsl(192, 50%, 88%)', // #cde7ee, $kobo-light-blue (Bareit)
+      'hsl(192, 50%, 95%)', // #e9f4f7, $kobo-bg-blue (Bareit)
     ],
     teal: [
       '#000',

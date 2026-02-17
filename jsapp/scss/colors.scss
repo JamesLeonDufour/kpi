@@ -41,12 +41,13 @@ $kobo-white: hsl(0deg 0% 100%); // #ffffff
  * Primary colours & shades
  */
 
-$kobo-dark-blue: hsl(207deg 77% 32%); // #135991
-$kobo-hover-blue: hsl(207deg 77% 43%); // #1977c2
-$kobo-blue: hsl(207deg 90% 54%); // #2095f3
-$kobo-mid-blue: hsl(207deg 90% 77%); // #8fcaf9 (previously $kobo-alt-blue)
-$kobo-light-blue: hsl(207deg 88% 91%); // #d2e9fc (previously $kobo-mid-blue)
-$kobo-bg-blue: hsl(206deg 84% 95%); // #e8f4fd (previously $kobo-light-blue)
+// Bareit: overridden to cyan/teal to match branding #0891B2
+$kobo-dark-blue: hsl(192deg 91% 25%); // #065a72
+$kobo-hover-blue: hsl(192deg 91% 31%); // #07758f
+$kobo-blue: hsl(192deg 91% 37%); // #0891B2
+$kobo-mid-blue: hsl(192deg 50% 70%); // #82c5d4
+$kobo-light-blue: hsl(192deg 50% 88%); // #cde7ee
+$kobo-bg-blue: hsl(192deg 50% 95%); // #e9f4f7
 
 // Bareit custom branding
 $bareit-blue: hsl(192deg 91% 37%); // #0891B2
