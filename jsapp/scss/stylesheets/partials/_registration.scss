@@ -43,15 +43,15 @@
     }
 
     a {
-      color: colors.$kobo-light-blue;
+      color: colors.$kobo-light-teal;
       text-decoration: underline;
       text-decoration-skip-ink: none;
-      text-decoration-color: rgba(colors.$kobo-light-blue, 0.5);
+      text-decoration-color: rgba(colors.$kobo-light-teal, 0.5);
 
       &:hover {
         // Darken by 6%, like kobo-button hover
-        color: color.scale(colors.$kobo-light-blue, $lightness: -6%);
-        text-decoration-color: rgba(color.scale(colors.$kobo-light-blue, $lightness: -6%), 0.5);
+        color: color.scale(colors.$kobo-light-teal, $lightness: -6%);
+        text-decoration-color: rgba(color.scale(colors.$kobo-light-teal, $lightness: -6%), 0.5);
       }
     }
 
@@ -141,8 +141,8 @@
 
     // Special button variant only used for SSO
     .kobo-button.kobo-button--sso {
-      background-color: colors.$kobo-light-blue;
-      color: colors.$kobo-dark-blue;
+      background-color: colors.$kobo-bg-teal;
+      color: colors.$kobo-dark-teal;
 
       &.btn-danger {
         background-color: colors.$kobo-mid-red;
@@ -241,7 +241,7 @@
 .registration select {
   &:focus {
     // emulate border-bottom for select inputs
-    box-shadow: inset 0 -3px colors.$kobo-blue;
+    box-shadow: inset 0 -3px colors.$bareit-blue;
   }
 }
 
@@ -252,7 +252,7 @@
 
   &:focus-within {
     background-color: rgba(colors.$kobo-light-storm, 0.05);
-    box-shadow: inset 0 -3px colors.$kobo-blue;
+    box-shadow: inset 0 -3px colors.$bareit-blue;
     transition: background-color 0.5s, box-shadow 0.5s;
   }
 }
