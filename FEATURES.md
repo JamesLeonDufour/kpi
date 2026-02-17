@@ -74,6 +74,10 @@ the Django admin interface.
   to the User admin at `/admin/kobo_auth/user/`.
 - A `UserImportResource` class handles password hashing and allauth
   `EmailAddress` creation automatically.
+- Handles BOM-encoded CSV files (common when exporting from Excel).
+- Dry run preview is safe -- it skips the actual database save to prevent
+  orphan records in KoBoCAT (which uses a separate database not covered by
+  the KPI transaction rollback).
 
 ### Expected CSV format
 

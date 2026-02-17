@@ -167,6 +167,14 @@ class UserImportResource(resources.ModelResource):
         if not row.get('username') or not row.get('password'):
             raise ValueError('username and password are required')
 
+    def save_instance(self, instance, is_create, row, **kwargs):
+        # Skip actual save during dry run to prevent post_save signals
+        # from syncing to KoBoCAT (a separate DB whose writes won't be
+        # rolled back with the KPI transaction).
+        if kwargs.get('dry_run'):
+            return
+        super().save_instance(instance, is_create, row, **kwargs)
+
     def after_save_instance(self, instance, row, **kwargs):
         if not kwargs.get('dry_run'):
             instance.set_password(row.get('password', ''))
