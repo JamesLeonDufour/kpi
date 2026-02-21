@@ -1,6 +1,9 @@
 import copy
 import json
+import uuid
 from typing import Union
+
+import openpyxl
 
 import jsonschema
 import requests
@@ -11,6 +14,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema
 from pymongo.errors import OperationFailure
 from rest_framework import renderers, serializers, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.pagination import _positive_int as positive_int
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -279,6 +283,130 @@ class DataViewSet(
             response = self._bulk_update(request)
 
         return Response(**response)
+
+    @action(
+        detail=False,
+        methods=['POST'],
+        url_path='import',
+        parser_classes=[MultiPartParser],
+        renderer_classes=[renderers.JSONRenderer],
+    )
+    def import_data(self, request, *args, **kwargs):
+        """
+        Import submissions from an XLS/XLSX file.
+
+        POST /api/v2/assets/{uid}/data/import/
+
+        Expects a multipart/form-data request with a ``file`` field containing
+        an .xls or .xlsx spreadsheet. Row 1 must contain question names (column
+        headers); each subsequent non-blank row is forwarded as a JSON
+        submission to the OpenRosa submission endpoint (``POST /submission``).
+
+        Returns JSON: ``{"imported": N, "failed": M, "errors": ["row 3: …"]}``
+        """
+        from rest_framework.authtoken.models import Token
+
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response(
+                {'detail': t('No file provided.')},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        filename = file_obj.name.lower()
+        if not (filename.endswith('.xls') or filename.endswith('.xlsx')):
+            return Response(
+                {'detail': t('Only .xls and .xlsx files are accepted.')},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        deployment = self._get_deployment()
+        xform_id_string = deployment.xform.id_string
+
+        try:
+            wb = openpyxl.load_workbook(file_obj, read_only=True, data_only=True)
+        except Exception as exc:
+            return Response(
+                {'detail': t('Could not open file: %(error)s') % {'error': str(exc)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        wb.close()
+
+        if not rows:
+            return Response({'imported': 0, 'failed': 0, 'errors': []})
+
+        headers = [
+            str(h).strip() if h is not None else ''
+            for h in rows[0]
+        ]
+
+        # Obtain (or create) an API token so each submission can be
+        # authenticated against the OpenRosa endpoint just like a real client.
+        token, _ = Token.objects.get_or_create(user=request.user)
+        submission_url = request.build_absolute_uri('/submission')
+
+        imported = 0
+        failed = 0
+        errors = []
+
+        for row_idx, row in enumerate(rows[1:], start=2):
+            # Skip completely blank rows
+            if all(cell is None or str(cell).strip() == '' for cell in row):
+                continue
+
+            # Build flat submission dict (skip empty-header columns)
+            submission_dict = {
+                header: (str(cell) if cell is not None else '')
+                for header, cell in zip(headers, row)
+                if header
+            }
+
+            # Convert flat slash-separated paths to a nested dict, then inject
+            # a fresh instanceID under meta/instanceID.
+            nested: dict = {}
+            for key, value in submission_dict.items():
+                parts = key.split('/')
+                d = nested
+                for part in parts[:-1]:
+                    d = d.setdefault(part, {})
+                d[parts[-1]] = value
+
+            nested.setdefault('meta', {})['instanceID'] = f'uuid:{uuid.uuid4()}'
+
+            # Forward the row to the OpenRosa JSON submission endpoint.
+            try:
+                resp = requests.post(
+                    submission_url,
+                    json={'id': xform_id_string, 'submission': nested},
+                    headers={'Authorization': f'Token {token.key}'},
+                )
+            except requests.RequestException as exc:
+                failed += 1
+                errors.append(f'row {row_idx}: {exc}')
+                continue
+
+            if resp.status_code in (
+                status.HTTP_200_OK,
+                status.HTTP_201_CREATED,
+                status.HTTP_202_ACCEPTED,
+            ):
+                imported += 1
+            else:
+                failed += 1
+                try:
+                    error_detail = resp.json().get('error', f'HTTP {resp.status_code}')
+                except ValueError:
+                    error_detail = f'HTTP {resp.status_code}'
+                errors.append(f'row {row_idx}: {error_detail}')
+
+        return Response({
+            'imported': imported,
+            'failed': failed,
+            'errors': errors,
+        })
 
     def destroy(self, request, pk, *args, **kwargs):
         deployment = self._get_deployment()

@@ -95,6 +95,7 @@ import ActionIcon from '../common/ActionIcon'
 import LimitNotifications from '../usageLimits/limitNotifications.component'
 import RepeatGroupCell from './RepeatGroupCell'
 import AudioCell from './audioCell'
+import DataImportModal from './dataImportModal'
 import MediaCell from './mediaCell'
 
 const DEFAULT_PAGE_SIZE = 30
@@ -129,6 +130,7 @@ interface DataTableState {
   fetchInstance?: ReactTableInstance
   lastChecked: string | null
   shiftSelection: DataTableSelectedRows
+  isImportModalOpen: boolean
 }
 
 /**
@@ -174,6 +176,7 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
       submissionPager: undefined,
       lastChecked: null,
       shiftSelection: {},
+      isImportModalOpen: false,
     }
   }
 
@@ -1422,6 +1425,17 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
               tooltip={t('Display options')}
               tooltipPosition='right'
             />
+
+            {userCan(PERMISSIONS_CODENAMES.add_submissions, this.props.asset) && (
+              <Button
+                type='text'
+                size='m'
+                startIcon='upload'
+                onClick={() => this.setState({ isImportModalOpen: true })}
+                tooltip={t('Import data from Excel')}
+                tooltipPosition='right'
+              />
+            )}
           </bem.FormView__item>
         </bem.FormView__group>
         <ReactTable
@@ -1461,6 +1475,16 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
           // Enables RTL support in table cells
           getTdProps={() => {
             return { dir: 'auto' }
+          }}
+        />
+
+        <DataImportModal
+          assetUid={this.props.asset.uid}
+          isOpen={this.state.isImportModalOpen}
+          onClose={() => this.setState({ isImportModalOpen: false })}
+          onImportComplete={() => {
+            this.setState({ isImportModalOpen: false })
+            this.refreshSubmissions()
           }}
         />
       </bem.FormView>
