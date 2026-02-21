@@ -2003,4 +2003,62 @@ export const dataInterface: DataInterface = {
       data: data,
     })
   },
+
+  /**
+   * Import submissions from an XLS/XLSX file into the given asset.
+   * Uses native XMLHttpRequest so upload progress events are available.
+   *
+   * @param uid - Asset UID
+   * @param file - The Excel file to upload
+   * @param onProgress - Optional callback receiving upload percentage (0-100)
+   */
+  importSubmissionsData(
+    uid: string,
+    file: File,
+    onProgress?: (pct: number) => void,
+  ): Promise<{ imported: number; failed: number; errors: string[] }> {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${ROOT_URL}/api/v2/assets/${uid}/data/import/`)
+
+      // Attach CSRF token from cookie (same pattern as orval.mutator.ts)
+      const csrfMatch = document.cookie.match(/csrftoken=(\w{32,64})/)
+      if (csrfMatch) {
+        xhr.setRequestHeader('X-CSRFToken', csrfMatch[1])
+      }
+
+      if (onProgress) {
+        xhr.upload.onprogress = (evt) => {
+          if (evt.lengthComputable) {
+            onProgress(Math.round((evt.loaded / evt.total) * 100))
+          }
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText))
+          } catch {
+            resolve({ imported: 0, failed: 0, errors: [xhr.responseText] })
+          }
+        } else {
+          try {
+            reject(JSON.parse(xhr.responseText))
+          } catch {
+            reject({ detail: xhr.responseText || `HTTP ${xhr.status}` })
+          }
+        }
+      }
+
+      xhr.onerror = () => {
+        reject({ detail: t('Network error') })
+      }
+
+      xhr.send(formData)
+    })
+  },
 }
