@@ -1200,6 +1200,14 @@
                 "description": "## Get user's assets\n\n\nSearch can be made with `q` parameter.\nSearch filters can be returned with results by passing `metadata=on` to querystring.\n\n\nResults can be sorted with `ordering` parameter, e.g.:\n\n```shell\ncurl -X GET https://kf.kobotoolbox.org/api/v2/assets/?ordering=-name\n```\n\n\nAllowed fields are:\n\n- `asset_type`\n- `date_modified`\n- `date_deployed`\n- `date_modified__date`\n- `date_deployed__date`\n- `name`\n- `settings__sector`\n- `settings__sector__value`\n- `settings__description`\n- `owner__username`\n- `owner__extra_details__data__name`\n- `owner__extra_details__data__organization`\n- `owner__email`\n- `_deployment_status`\n- `subscribers_count`\n\n\nNote: Collections can be displayed first with parameter `collections_first`, e.g.:\n\n```shell\ncurl -X GET https://kf.kobotoolbox.org/api/v2/assets/?collections_first=true&ordering=-name\n```\n",
                 "parameters": [
                     {
+                        "in": "query",
+                        "name": "current_user_permissions_only",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "When `true`, only return the requesting user's own permission assignments. When `false` (default), return all visible assignments."
+                    },
+                    {
                         "name": "limit",
                         "required": false,
                         "in": "query",
@@ -1691,27 +1699,7 @@
                                         "summary": "NLP Advanced Features",
                                         "description": "`<action_id>` can be any of:\n\n* `manual_transcription`\n* `manual_translation`\n* `automatic_google_transcription`\n* `automatic_google_translation`\n"
                                     },
-                                    "QualitativeAnalysis-SimpleTypes_": {
-                                        "value": [
-                                            {
-                                                "action": "<action_id>",
-                                                "question_xpath": "q1",
-                                                "params": [
-                                                    {
-                                                        "type": "<question_type>",
-                                                        "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
-                                                        "labels": {
-                                                            "_default": "Qualitative analysis result"
-                                                        }
-                                                    }
-                                                ],
-                                                "uid": "qa123456789AbCdEfGhIjklm"
-                                            }
-                                        ],
-                                        "summary": "Qualitative Analysis - Simple Types ",
-                                        "description": "`<question_type>` may be either `qualText` or `qualInteger`\n\n`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
-                                    },
-                                    "QualitativeAnalysis-SimpleTypes-ManualOnly": {
+                                    "ManualQualitativeAnalysis-SimpleTypes_": {
                                         "value": [
                                             {
                                                 "action": "manual_qual",
@@ -1728,13 +1716,13 @@
                                                 "uid": "qa123456789AbCdEfGhIjklm"
                                             }
                                         ],
-                                        "summary": "Qualitative Analysis - Simple Types - Manual Only",
-                                        "description": "`<question_type>` may be either `qualNote` or `qualTags`"
+                                        "summary": "Manual Qualitative Analysis - Simple Types ",
+                                        "description": "`<question_type>` may be any of:\n\n* `qualText`\n* `qualInteger`\n* `qualNote`\n* `qualTags`\n"
                                     },
-                                    "QualitativeAnalysis-SingleChoiceQuestion": {
+                                    "ManualQualitativeAnalysis-SingleChoiceQuestion": {
                                         "value": [
                                             {
-                                                "action": "<action_id>",
+                                                "action": "manual_qual",
                                                 "question_xpath": "q1",
                                                 "params": [
                                                     {
@@ -1768,13 +1756,12 @@
                                                 "uid": "qa123456789AbCdEfGhIjklm"
                                             }
                                         ],
-                                        "summary": "Qualitative Analysis - Single Choice Question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Single Choice Question"
                                     },
-                                    "QualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
+                                    "ManualQualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
                                         "value": [
                                             {
-                                                "action": "<action_id>",
+                                                "action": "manual_qual",
                                                 "question_xpath": "q1",
                                                 "params": [
                                                     {
@@ -1811,13 +1798,12 @@
                                                 "uid": "qa123456789AbCdEfGhIjklm"
                                             }
                                         ],
-                                        "summary": "Qualitative Analysis - Multiple Choice Question (with deleted choice)",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Multiple Choice Question (with deleted choice)"
                                     },
-                                    "QualitativeAnalysis-DeletedQuestion": {
+                                    "ManualQualitativeAnalysis-DeletedQuestion": {
                                         "value": [
                                             {
-                                                "action": "<action_id>",
+                                                "action": "manual_qual",
                                                 "question_xpath": "q1",
                                                 "params": [
                                                     {
@@ -1834,8 +1820,70 @@
                                                 "uid": "qa123456789AbCdEfGhIjklm"
                                             }
                                         ],
-                                        "summary": "Qualitative Analysis - Deleted question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Deleted Question"
+                                    },
+                                    "ManualQualitativeAnalysis-QuestionWithHints": {
+                                        "value": [
+                                            {
+                                                "action": "manual_qual",
+                                                "question_xpath": "q1",
+                                                "params": [
+                                                    {
+                                                        "type": "qualSelectMultiple",
+                                                        "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
+                                                        "labels": {
+                                                            "_default": "Tags"
+                                                        },
+                                                        "hint": {
+                                                            "labels": {
+                                                                "_default": "Select the most appropriate"
+                                                            }
+                                                        },
+                                                        "choices": [
+                                                            {
+                                                                "uuid": "zzzzzzzz-bbbb-cccc-dddd-eeeeffffffff",
+                                                                "labels": {
+                                                                    "_default": "Food"
+                                                                },
+                                                                "hint": {
+                                                                    "labels": {
+                                                                        "_default": "Include water"
+                                                                    }
+                                                                }
+                                                            },
+                                                            {
+                                                                "uuid": "yyyyyyyy-bbbb-cccc-dddd-eeeeffffffff",
+                                                                "labels": {
+                                                                    "_default": "Medical"
+                                                                },
+                                                                "hint": {
+                                                                    "labels": {
+                                                                        "_default": "Include dental work"
+                                                                    }
+                                                                }
+                                                            }
+                                                        ]
+                                                    }
+                                                ],
+                                                "uid": "qa123456789AbCdEfGhIjklm"
+                                            }
+                                        ],
+                                        "summary": "Manual Qualitative Analysis - Question With Hints"
+                                    },
+                                    "AutomaticQualitativeAnalysis-AnyQuestion": {
+                                        "value": [
+                                            {
+                                                "action": "automatic_bedrock_qual",
+                                                "question_xpath": "q1",
+                                                "params": [
+                                                    {
+                                                        "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+                                                    }
+                                                ],
+                                                "uid": "qa123456789AbCdEfGhIjklm"
+                                            }
+                                        ],
+                                        "summary": "Automatic Qualitative Analysis - Any question"
                                     }
                                 }
                             }
@@ -1902,24 +1950,7 @@
                                     "summary": "NLP Advanced Features",
                                     "description": "`<action_id>` can be any of:\n\n* `manual_transcription`\n* `manual_translation`\n* `automatic_google_transcription`\n* `automatic_google_translation`\n"
                                 },
-                                "QualitativeAnalysis-SimpleTypes": {
-                                    "value": {
-                                        "action": "<action_id>",
-                                        "question_xpath": "q1",
-                                        "params": [
-                                            {
-                                                "type": "<question_type>",
-                                                "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
-                                                "labels": {
-                                                    "_default": "Qualitative analysis result"
-                                                }
-                                            }
-                                        ]
-                                    },
-                                    "summary": "Qualitative Analysis - Simple Types",
-                                    "description": "`<question_type>` may be either `qualText` or `qualInteger`:\n\n`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
-                                },
-                                "QualitativeAnalysis-SimpleTypes-ManualOnly": {
+                                "ManualQualitativeAnalysis-SimpleTypes": {
                                     "value": {
                                         "action": "manual_qual",
                                         "question_xpath": "q1",
@@ -1933,12 +1964,12 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Simple Types - Manual Only",
-                                    "description": "`<question_type>` may be either `qualTags` or `qualNote`"
+                                    "summary": "Manual Qualitative Analysis - Simple Types",
+                                    "description": "`<question_type>` may be any of:\n\n* `qualText`\n* `qualInteger`\n* `qualNote`\n* `qualTags`\n"
                                 },
-                                "QualitativeAnalysis-SingleChoiceQuestion": {
+                                "ManualQualitativeAnalysis-SingleChoiceQuestion": {
                                     "value": {
-                                        "action": "<action_id>",
+                                        "action": "manual_qual",
                                         "question_xpath": "q1",
                                         "params": [
                                             {
@@ -1970,12 +2001,11 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Single Choice Question",
-                                    "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                    "summary": "Manual Qualitative Analysis - Single Choice Question"
                                 },
-                                "QualitativeAnalysis-MultipleChoiceQuestion": {
+                                "ManualQualitativeAnalysis-MultipleChoiceQuestion": {
                                     "value": {
-                                        "action": "<action_id>",
+                                        "action": "manual_qual",
                                         "question_xpath": "q1",
                                         "params": [
                                             {
@@ -2007,8 +2037,77 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Multiple Choice Question",
-                                    "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                    "summary": "Manual Qualitative Analysis - Multiple Choice Question"
+                                },
+                                "ManualQualitativeAnalysis-Hints": {
+                                    "value": {
+                                        "action": "manual_qual",
+                                        "question_xpath": "q1",
+                                        "params": [
+                                            {
+                                                "type": "qualSelectOne",
+                                                "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
+                                                "labels": {
+                                                    "_default": "Favorite shade of blue?"
+                                                },
+                                                "hint": {
+                                                    "labels": {
+                                                        "_default": "Select closest shade"
+                                                    }
+                                                },
+                                                "choices": [
+                                                    {
+                                                        "uuid": "qqqqqqqq-bbbb-cccc-dddd-eeeeffffffff",
+                                                        "labels": {
+                                                            "_default": "Midnight"
+                                                        },
+                                                        "hint": {
+                                                            "labels": {
+                                                                "_default": "Darkest blue"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "uuid": "hhhhhhhh-bbbb-cccc-dddd-eeeeffffffff",
+                                                        "labels": {
+                                                            "_default": "Royal"
+                                                        },
+                                                        "hint": {
+                                                            "labels": {
+                                                                "_default": "True blue"
+                                                            }
+                                                        }
+                                                    },
+                                                    {
+                                                        "uuid": "gggggggg-bbbb-cccc-dddd-eeeeffffffff",
+                                                        "labels": {
+                                                            "_default": "Cornflower"
+                                                        },
+                                                        "hint": {
+                                                            "labels": {
+                                                                "_default": "Lightest blue"
+                                                            }
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "summary": "Manual Qualitative Analysis - Hints",
+                                    "description": "Question hints are allowed for all types of questions. Choice hints are allowed for all questions with choices."
+                                },
+                                "AutomaticQualitativeAnalysis-AnyQuestion": {
+                                    "value": {
+                                        "action": "automatic_bedrock_qual",
+                                        "question_xpath": "q1",
+                                        "params": [
+                                            {
+                                                "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+                                            }
+                                        ]
+                                    },
+                                    "summary": "Automatic Qualitative Analysis - Any Question",
+                                    "description": "`uuid`s should match those present in the `manual_qual` action for the same survey question."
                                 }
                             }
                         }
@@ -2137,25 +2236,7 @@
                                         "summary": "NLP Advanced Features",
                                         "description": "`<action_id>` can be any of:\n\n* `manual_transcription`\n* `manual_translation`\n* `automatic_google_transcription`\n* `automatic_google_translation`\n"
                                     },
-                                    "QualitativeAnalysis-SimpleTypes_": {
-                                        "value": {
-                                            "action": "<action_id>",
-                                            "question_xpath": "q1",
-                                            "params": [
-                                                {
-                                                    "type": "<question_type>",
-                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
-                                                    "labels": {
-                                                        "_default": "Qualitative analysis result"
-                                                    }
-                                                }
-                                            ],
-                                            "uid": "qa123456789AbCdEfGhIjklm"
-                                        },
-                                        "summary": "Qualitative Analysis - Simple Types ",
-                                        "description": "`<question_type>` may be either `qualText` or `qualInteger`\n\n`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
-                                    },
-                                    "QualitativeAnalysis-SimpleTypes-ManualOnly": {
+                                    "ManualQualitativeAnalysis-SimpleTypes_": {
                                         "value": {
                                             "action": "manual_qual",
                                             "question_xpath": "q1",
@@ -2170,12 +2251,12 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Simple Types - Manual Only",
-                                        "description": "`<question_type>` may be either `qualNote` or `qualTags`"
+                                        "summary": "Manual Qualitative Analysis - Simple Types ",
+                                        "description": "`<question_type>` may be any of:\n\n* `qualText`\n* `qualInteger`\n* `qualNote`\n* `qualTags`\n"
                                     },
-                                    "QualitativeAnalysis-SingleChoiceQuestion": {
+                                    "ManualQualitativeAnalysis-SingleChoiceQuestion": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2208,12 +2289,11 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Single Choice Question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Single Choice Question"
                                     },
-                                    "QualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
+                                    "ManualQualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2249,12 +2329,11 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Multiple Choice Question (with deleted choice)",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Multiple Choice Question (with deleted choice)"
                                     },
-                                    "QualitativeAnalysis-DeletedQuestion": {
+                                    "ManualQualitativeAnalysis-DeletedQuestion": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2270,8 +2349,66 @@
                                             },
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Deleted question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Deleted Question"
+                                    },
+                                    "ManualQualitativeAnalysis-QuestionWithHints": {
+                                        "value": {
+                                            "action": "manual_qual",
+                                            "question_xpath": "q1",
+                                            "params": [
+                                                {
+                                                    "type": "qualSelectMultiple",
+                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
+                                                    "labels": {
+                                                        "_default": "Tags"
+                                                    },
+                                                    "hint": {
+                                                        "labels": {
+                                                            "_default": "Select the most appropriate"
+                                                        }
+                                                    },
+                                                    "choices": [
+                                                        {
+                                                            "uuid": "zzzzzzzz-bbbb-cccc-dddd-eeeeffffffff",
+                                                            "labels": {
+                                                                "_default": "Food"
+                                                            },
+                                                            "hint": {
+                                                                "labels": {
+                                                                    "_default": "Include water"
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "uuid": "yyyyyyyy-bbbb-cccc-dddd-eeeeffffffff",
+                                                            "labels": {
+                                                                "_default": "Medical"
+                                                            },
+                                                            "hint": {
+                                                                "labels": {
+                                                                    "_default": "Include dental work"
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "uid": "qa123456789AbCdEfGhIjklm"
+                                        },
+                                        "summary": "Manual Qualitative Analysis - Question With Hints"
+                                    },
+                                    "AutomaticQualitativeAnalysis-AnyQuestion": {
+                                        "value": {
+                                            "action": "automatic_bedrock_qual",
+                                            "question_xpath": "q1",
+                                            "params": [
+                                                {
+                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+                                                }
+                                            ],
+                                            "uid": "qa123456789AbCdEfGhIjklm"
+                                        },
+                                        "summary": "Automatic Qualitative Analysis - Any question"
                                     }
                                 }
                             }
@@ -2345,7 +2482,7 @@
                                     "summary": "NLP Advanced Features",
                                     "description": "This may be used to update any of the NLP actions:\n\n* `manual_transcription`\n* `manual_translation`\n* `automatic_google_transcription`\n* `automatic_google_translation`\n"
                                 },
-                                "QualitativeAnalysis-SimpleTypes": {
+                                "ManualQualitativeAnalysis-SimpleTypes": {
                                     "value": {
                                         "params": [
                                             {
@@ -2357,25 +2494,10 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Simple Types",
-                                    "description": "`<question_type>` may be either `qualText` or `qualInteger`\n\nThis may be used to update either `manual_qual` or `automatic_bedrock_qual` actions"
+                                    "summary": "Manual Qualitative Analysis - Simple Types",
+                                    "description": "`<question_type>` may be any of:\n\n* `qualText`\n* `qualInteger`\n* `qualNote`\n* `qualTags`\n"
                                 },
-                                "QualitativeAnalysis-SimpleTypes-ManualOnly": {
-                                    "value": {
-                                        "params": [
-                                            {
-                                                "type": "<question_type>",
-                                                "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
-                                                "labels": {
-                                                    "_default": "Qualitative analysis result"
-                                                }
-                                            }
-                                        ]
-                                    },
-                                    "summary": "Qualitative Analysis - Simple Types - Manual Only",
-                                    "description": "`<question_type>` may be either `qualTags` or `qualNote`"
-                                },
-                                "QualitativeAnalysis-SingleChoiceQuestion": {
+                                "ManualQualitativeAnalysis-SingleChoiceQuestion": {
                                     "value": {
                                         "params": [
                                             {
@@ -2407,10 +2529,9 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Single Choice Question",
-                                    "description": "This may be used to update either `manual_qual` or `automatic_bedrock_qual` actions"
+                                    "summary": "Manual Qualitative Analysis - Single Choice Question"
                                 },
-                                "QualitativeAnalysis-MultipleChoiceQuestion": {
+                                "ManualQualitativeAnalysis-MultipleChoiceQuestion": {
                                     "value": {
                                         "params": [
                                             {
@@ -2442,8 +2563,21 @@
                                             }
                                         ]
                                     },
-                                    "summary": "Qualitative Analysis - Multiple Choice Question",
-                                    "description": "This may be used to update either `manual_qual` or `automatic_bedrock_qual` actions"
+                                    "summary": "Manual Qualitative Analysis - Multiple Choice Question"
+                                },
+                                "AutomaticQualitativeAnalysis-AllTypes": {
+                                    "value": {
+                                        "params": [
+                                            {
+                                                "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+                                            },
+                                            {
+                                                "uuid": "dddddddd-eeee-ffff-gggg-hhhhhhhhhhhhh"
+                                            }
+                                        ]
+                                    },
+                                    "summary": "Automatic Qualitative Analysis - All Types",
+                                    "description": "`uuid`s should match those present in the `manual_qual` action for the same survey question."
                                 }
                             }
                         }
@@ -2482,25 +2616,7 @@
                                         "summary": "NLP Advanced Features",
                                         "description": "`<action_id>` can be any of:\n\n* `manual_transcription`\n* `manual_translation`\n* `automatic_google_transcription`\n* `automatic_google_translation`\n"
                                     },
-                                    "QualitativeAnalysis-SimpleTypes_": {
-                                        "value": {
-                                            "action": "<action_id>",
-                                            "question_xpath": "q1",
-                                            "params": [
-                                                {
-                                                    "type": "<question_type>",
-                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
-                                                    "labels": {
-                                                        "_default": "Qualitative analysis result"
-                                                    }
-                                                }
-                                            ],
-                                            "uid": "qa123456789AbCdEfGhIjklm"
-                                        },
-                                        "summary": "Qualitative Analysis - Simple Types ",
-                                        "description": "`<question_type>` may be either `qualText` or `qualInteger`\n\n`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
-                                    },
-                                    "QualitativeAnalysis-SimpleTypes-ManualOnly": {
+                                    "ManualQualitativeAnalysis-SimpleTypes_": {
                                         "value": {
                                             "action": "manual_qual",
                                             "question_xpath": "q1",
@@ -2515,12 +2631,12 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Simple Types - Manual Only",
-                                        "description": "`<question_type>` may be either `qualNote` or `qualTags`"
+                                        "summary": "Manual Qualitative Analysis - Simple Types ",
+                                        "description": "`<question_type>` may be any of:\n\n* `qualText`\n* `qualInteger`\n* `qualNote`\n* `qualTags`\n"
                                     },
-                                    "QualitativeAnalysis-SingleChoiceQuestion": {
+                                    "ManualQualitativeAnalysis-SingleChoiceQuestion": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2553,12 +2669,11 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Single Choice Question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Single Choice Question"
                                     },
-                                    "QualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
+                                    "ManualQualitativeAnalysis-MultipleChoiceQuestion(withDeletedChoice)": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2594,12 +2709,11 @@
                                             ],
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Multiple Choice Question (with deleted choice)",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Multiple Choice Question (with deleted choice)"
                                     },
-                                    "QualitativeAnalysis-DeletedQuestion": {
+                                    "ManualQualitativeAnalysis-DeletedQuestion": {
                                         "value": {
-                                            "action": "<action_id>",
+                                            "action": "manual_qual",
                                             "question_xpath": "q1",
                                             "params": [
                                                 {
@@ -2615,8 +2729,66 @@
                                             },
                                             "uid": "qa123456789AbCdEfGhIjklm"
                                         },
-                                        "summary": "Qualitative Analysis - Deleted question",
-                                        "description": "`<action_id>` may be either `manual_qual` or `automatic_bedrock_qual`"
+                                        "summary": "Manual Qualitative Analysis - Deleted Question"
+                                    },
+                                    "ManualQualitativeAnalysis-QuestionWithHints": {
+                                        "value": {
+                                            "action": "manual_qual",
+                                            "question_xpath": "q1",
+                                            "params": [
+                                                {
+                                                    "type": "qualSelectMultiple",
+                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff",
+                                                    "labels": {
+                                                        "_default": "Tags"
+                                                    },
+                                                    "hint": {
+                                                        "labels": {
+                                                            "_default": "Select the most appropriate"
+                                                        }
+                                                    },
+                                                    "choices": [
+                                                        {
+                                                            "uuid": "zzzzzzzz-bbbb-cccc-dddd-eeeeffffffff",
+                                                            "labels": {
+                                                                "_default": "Food"
+                                                            },
+                                                            "hint": {
+                                                                "labels": {
+                                                                    "_default": "Include water"
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "uuid": "yyyyyyyy-bbbb-cccc-dddd-eeeeffffffff",
+                                                            "labels": {
+                                                                "_default": "Medical"
+                                                            },
+                                                            "hint": {
+                                                                "labels": {
+                                                                    "_default": "Include dental work"
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "uid": "qa123456789AbCdEfGhIjklm"
+                                        },
+                                        "summary": "Manual Qualitative Analysis - Question With Hints"
+                                    },
+                                    "AutomaticQualitativeAnalysis-AnyQuestion": {
+                                        "value": {
+                                            "action": "automatic_bedrock_qual",
+                                            "question_xpath": "q1",
+                                            "params": [
+                                                {
+                                                    "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeffffffff"
+                                                }
+                                            ],
+                                            "uid": "qa123456789AbCdEfGhIjklm"
+                                        },
+                                        "summary": "Automatic Qualitative Analysis - Any question"
                                     }
                                 }
                             }
@@ -7968,10 +8140,11 @@
                             "enum": [
                                 0,
                                 1,
-                                2
+                                2,
+                                3
                             ]
                         },
-                        "description": "* `0` - failed\n* `1` - pending\n* `2` - success"
+                        "description": "* `0` - failed\n* `1` - pending\n* `3` - processing\n* `2` - success"
                     },
                     {
                         "in": "path",
@@ -15204,7 +15377,10 @@
                                     "$ref": "#/components/schemas/CreateResponseNLPActionParams"
                                 },
                                 {
-                                    "$ref": "#/components/schemas/CreateResponseQualActionParams"
+                                    "$ref": "#/components/schemas/CreateResponseManualQualActionParams"
+                                },
+                                {
+                                    "$ref": "#/components/schemas/CreateResponseAutomaticQualActionParams"
                                 }
                             ]
                         }
@@ -15237,7 +15413,10 @@
                                     "$ref": "#/components/schemas/RequestNLPActionParams"
                                 },
                                 {
-                                    "$ref": "#/components/schemas/RequestQualActionParams"
+                                    "$ref": "#/components/schemas/RequestManualQualActionParams"
+                                },
+                                {
+                                    "$ref": "#/components/schemas/RequestAutomaticQualActionParams"
                                 }
                             ]
                         }
@@ -15266,7 +15445,10 @@
                                     "$ref": "#/components/schemas/ResponseNLPActionParams"
                                 },
                                 {
-                                    "$ref": "#/components/schemas/ResponseQualActionParams"
+                                    "$ref": "#/components/schemas/ResponseManualQualActionParams"
+                                },
+                                {
+                                    "$ref": "#/components/schemas/ResponseAutomaticQualActionParams"
                                 }
                             ]
                         }
@@ -16914,6 +17096,29 @@
                     }
                 ]
             },
+            "CreateResponseAutomaticQualActionParams": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "uuid"
+                ]
+            },
+            "CreateResponseManualQualActionParams": {
+                "anyOf": [
+                    {
+                        "$ref": "#/components/schemas/CreateResponseQualSimpleQuestionParams"
+                    },
+                    {
+                        "$ref": "#/components/schemas/CreateResponseQualSelectQuestionParams"
+                    }
+                ]
+            },
             "CreateResponseNLPActionParams": {
                 "type": "object",
                 "additionalProperties": false,
@@ -16924,16 +17129,6 @@
                 },
                 "required": [
                     "language"
-                ]
-            },
-            "CreateResponseQualActionParams": {
-                "anyOf": [
-                    {
-                        "$ref": "#/components/schemas/CreateResponseQualSimpleQuestionParams"
-                    },
-                    {
-                        "$ref": "#/components/schemas/CreateResponseQualSelectQuestionParams"
-                    }
                 ]
             },
             "CreateResponseQualSelectQuestionParams": {
@@ -16984,6 +17179,25 @@
                                 "uuid": {
                                     "type": "string",
                                     "format": "uuid"
+                                },
+                                "hint": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "labels": {
+                                        "type": "object",
+                                        "properties": {
+                                            "_default": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "additionalProperties": {
+                                            "type": "string"
+                                        },
+                                        "required": [
+                                            "_default"
+                                        ]
+                                    },
+                                    "required": "labels"
                                 }
                             },
                             "required": [
@@ -16991,6 +17205,25 @@
                                 "uuid"
                             ]
                         }
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
@@ -17024,6 +17257,25 @@
                         "required": [
                             "_default"
                         ]
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
@@ -18862,10 +19114,11 @@
                 "enum": [
                     0,
                     1,
+                    3,
                     2
                 ],
                 "type": "integer",
-                "description": "* `0` - failed\n* `1` - pending\n* `2` - success"
+                "description": "* `0` - failed\n* `1` - pending\n* `3` - processing\n* `2` - success"
             },
             "HookRetryResponse": {
                 "type": "object",
@@ -21520,7 +21773,10 @@
                                     "$ref": "#/components/schemas/RequestNLPActionParams"
                                 },
                                 {
-                                    "$ref": "#/components/schemas/RequestQualActionParams"
+                                    "$ref": "#/components/schemas/RequestManualQualActionParams"
+                                },
+                                {
+                                    "$ref": "#/components/schemas/RequestAutomaticQualActionParams"
                                 }
                             ]
                         }
@@ -23398,6 +23654,29 @@
                     "url"
                 ]
             },
+            "RequestAutomaticQualActionParams": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "uuid"
+                ]
+            },
+            "RequestManualQualActionParams": {
+                "anyOf": [
+                    {
+                        "$ref": "#/components/schemas/RequestQualSimpleQuestionParams"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RequestQualSelectQuestionParams"
+                    }
+                ]
+            },
             "RequestNLPActionParams": {
                 "type": "object",
                 "additionalProperties": false,
@@ -23408,16 +23687,6 @@
                 },
                 "required": [
                     "language"
-                ]
-            },
-            "RequestQualActionParams": {
-                "anyOf": [
-                    {
-                        "$ref": "#/components/schemas/RequestQualSimpleQuestionParams"
-                    },
-                    {
-                        "$ref": "#/components/schemas/RequestQualSelectQuestionParams"
-                    }
                 ]
             },
             "RequestQualSelectQuestionParams": {
@@ -23468,6 +23737,25 @@
                                 "uuid": {
                                     "type": "string",
                                     "format": "uuid"
+                                },
+                                "hint": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "labels": {
+                                        "type": "object",
+                                        "properties": {
+                                            "_default": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "additionalProperties": {
+                                            "type": "string"
+                                        },
+                                        "required": [
+                                            "_default"
+                                        ]
+                                    },
+                                    "required": "labels"
                                 }
                             },
                             "required": [
@@ -23475,6 +23763,25 @@
                                 "uuid"
                             ]
                         }
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
@@ -23508,12 +23815,54 @@
                         "required": [
                             "_default"
                         ]
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
                     "uuid",
                     "type",
                     "labels"
+                ]
+            },
+            "ResponseAutomaticQualActionParams": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "uuid"
+                ]
+            },
+            "ResponseManualQualActionParams": {
+                "anyOf": [
+                    {
+                        "$ref": "#/components/schemas/ResponseQualSimpleQuestionParams"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ResponseQualSelectQuestionParams"
+                    }
                 ]
             },
             "ResponseNLPActionParams": {
@@ -23526,16 +23875,6 @@
                 },
                 "required": [
                     "language"
-                ]
-            },
-            "ResponseQualActionParams": {
-                "anyOf": [
-                    {
-                        "$ref": "#/components/schemas/ResponseQualSimpleQuestionParams"
-                    },
-                    {
-                        "$ref": "#/components/schemas/ResponseQualSelectQuestionParams"
-                    }
                 ]
             },
             "ResponseQualSelectQuestionParams": {
@@ -23594,6 +23933,25 @@
                                             "type": "boolean"
                                         }
                                     }
+                                },
+                                "hint": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "labels": {
+                                        "type": "object",
+                                        "properties": {
+                                            "_default": {
+                                                "type": "string"
+                                            }
+                                        },
+                                        "additionalProperties": {
+                                            "type": "string"
+                                        },
+                                        "required": [
+                                            "_default"
+                                        ]
+                                    },
+                                    "required": "labels"
                                 }
                             },
                             "required": [
@@ -23609,6 +23967,25 @@
                                 "type": "boolean"
                             }
                         }
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
@@ -23650,6 +24027,25 @@
                                 "type": "boolean"
                             }
                         }
+                    },
+                    "hint": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "labels": {
+                            "type": "object",
+                            "properties": {
+                                "_default": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": {
+                                "type": "string"
+                            },
+                            "required": [
+                                "_default"
+                            ]
+                        },
+                        "required": "labels"
                     }
                 },
                 "required": [
@@ -23885,6 +24281,7 @@
                         "format": "date-time",
                         "readOnly": true
                     },
+                    "stripe_data": {},
                     "id": {
                         "type": "string",
                         "maxLength": 255
