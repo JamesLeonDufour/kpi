@@ -336,9 +336,11 @@ To change colors:
 4. Edit `kpi/templates/base_simple.html` -- update the `mask-icon` color (should match `$bareit-navy`)
 5. Push to `custom-branding` branch:
    ```bash
-   git add -A && git commit -m "feat: update branding color" && git push
+   git add -A
+   git commit -m "feat: update branding color"
+   git push origin custom-branding
    ```
-6. Wait for GitHub Actions to finish building (~15-30 min)
+6. Build and publish a fresh image manually
 7. Deploy:
    ```bash
    /root/kpi-bareit/deploy.sh
