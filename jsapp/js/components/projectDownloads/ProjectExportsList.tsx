@@ -2,8 +2,8 @@ import React from 'react'
 
 import { Flex, Text } from '@mantine/core'
 import alertify from 'alertifyjs'
+import isEqual from 'lodash.isequal'
 import { actions } from '#/actions'
-import { getLanguageIndex } from '#/assetUtils'
 import bem from '#/bem'
 import SimpleTable from '#/components/common/SimpleTable'
 import Button from '#/components/common/button'
@@ -15,11 +15,20 @@ import {
   EXPORT_FORMATS,
   EXPORT_TYPES,
   ExportStatusName,
+  DEFAULT_EXPORT_SETTINGS,
+  ExportTypeName,
   type ExportTypeDefinition,
 } from '#/components/projectDownloads/exportsConstants'
 import exportsStore from '#/components/projectDownloads/exportsStore'
-import type { AssetResponse, ExportDataLang, ExportDataResponse, PaginatedResponse } from '#/dataInterface'
-import { formatTime } from '#/utils'
+import type {
+  AssetResponse,
+  ExportDataLang,
+  ExportDataResponse,
+  ExportSetting,
+  ExportSettingSettings,
+  PaginatedResponse,
+} from '#/dataInterface'
+import { formatTime, notify } from '#/utils'
 
 interface ProjectExportsListProps {
   asset: AssetResponse
@@ -28,6 +37,7 @@ interface ProjectExportsListProps {
 interface ProjectExportsListState {
   isComponentReady: boolean
   rows: ExportDataResponse[]
+  exportSettings: ExportSetting[]
   selectedExportType: ExportTypeDefinition
 }
 
@@ -40,6 +50,7 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     super(props)
     this.state = {
       isComponentReady: false,
+      exportSettings: [],
       rows: [],
       selectedExportType: exportsStore.getExportType(),
     }
@@ -53,11 +64,16 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     this.unlisteners.push(
       exportsStore.listen(this.onExportsStoreChange.bind(this), this),
       actions.exports.getExports.completed.listen(this.onGetExports.bind(this)),
+      actions.exports.getExportSettings.completed.listen(this.onGetExportSettings.bind(this)),
       actions.exports.createExport.completed.listen(this.onCreateExport.bind(this)),
+      actions.exports.createExportSetting.completed.listen(this.fetchExportSettings.bind(this)),
       actions.exports.deleteExport.completed.listen(this.onDeleteExport.bind(this)),
+      actions.exports.deleteExportSetting.completed.listen(this.fetchExportSettings.bind(this)),
       actions.exports.getExport.completed.listen(this.onGetExport.bind(this)),
+      actions.exports.updateExportSetting.completed.listen(this.fetchExportSettings.bind(this)),
     )
     this.fetchExports()
+    this.fetchExportSettings()
   }
 
   componentWillUnmount() {
@@ -79,6 +95,12 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     this.setState({
       isComponentReady: true,
       rows: response.results,
+    })
+  }
+
+  onGetExportSettings(response: PaginatedResponse<ExportSetting>) {
+    this.setState({
+      exportSettings: response.results,
     })
   }
 
@@ -154,6 +176,10 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     actions.exports.getExports(this.props.asset.uid)
   }
 
+  fetchExportSettings() {
+    actions.exports.getExportSettings(this.props.asset.uid)
+  }
+
   deleteExport(exportUid: string) {
     const dialog = alertify.dialog('confirm')
     const opts = {
@@ -190,7 +216,6 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     // Unknown happens when export was done for a translated language that
     // doesn't exist in current form version
     let languageDisplay: React.ReactNode = <em>{t('Unknown')}</em>
-    const langIndex = getLanguageIndex(this.props.asset, exportLangCast)
     if (EXPORT_FORMATS[exportLangCast]) {
       // Regardless if there is a translation or not, the export has a label that we can display to the user
       languageDisplay = EXPORT_FORMATS[exportLangCast].label
@@ -200,52 +225,153 @@ export default class ProjectExportsList extends React.Component<ProjectExportsLi
     return languageDisplay
   }
 
+  isSyncLinkSupported(exportType: ExportTypeName) {
+    return exportType === ExportTypeName.csv || exportType === ExportTypeName.xls
+  }
+
+  normalizeExportSettings(data: Partial<ExportSettingSettings> & Pick<ExportDataResponse['data'], 'type' | 'lang'>) {
+    return {
+      fields: data.fields ?? [],
+      fields_from_all_versions: data.fields_from_all_versions ?? DEFAULT_EXPORT_SETTINGS.INCLUDE_ALL_VERSIONS,
+      flatten: data.flatten ?? DEFAULT_EXPORT_SETTINGS.FLATTEN_GEO_JSON,
+      group_sep: data.group_sep ?? DEFAULT_EXPORT_SETTINGS.GROUP_SEPARATOR,
+      hierarchy_in_labels: data.hierarchy_in_labels ?? DEFAULT_EXPORT_SETTINGS.INCLUDE_GROUPS,
+      include_media_url: data.include_media_url ?? DEFAULT_EXPORT_SETTINGS.INCLUDE_MEDIA_URL,
+      lang: data.lang,
+      multiple_select: data.multiple_select ?? DEFAULT_EXPORT_SETTINGS.EXPORT_MULTIPLE.value,
+      query: data.query ?? {},
+      submission_ids: data.submission_ids ?? [],
+      tag_cols_for_header: data.tag_cols_for_header ?? ['hxl'],
+      type: data.type,
+      xls_types_as_text: data.xls_types_as_text ?? DEFAULT_EXPORT_SETTINGS.XLS_TYPES_AS_TEXT,
+    }
+  }
+
+  findMatchingExportSetting(exportData: ExportDataResponse) {
+    const normalizedExportData = this.normalizeExportSettings(exportData.data)
+
+    return this.state.exportSettings.find((exportSetting) => {
+      const normalizedExportSetting = this.normalizeExportSettings(exportSetting.export_settings)
+
+      return isEqual(normalizedExportSetting, normalizedExportData)
+    })
+  }
+
+  copySyncLink(link: string) {
+    const copyWithExecCommand = () => {
+      const textArea = document.createElement('textarea')
+      textArea.value = link
+      textArea.setAttribute('readonly', '')
+      textArea.style.position = 'absolute'
+      textArea.style.left = '-9999px'
+      document.body.appendChild(textArea)
+      textArea.select()
+      const wasCopied = document.execCommand('copy')
+      document.body.removeChild(textArea)
+      return wasCopied
+    }
+
+    const notifyCopyError = () => {
+      notify(t('Failed to copy sync link'), 'error')
+    }
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(link)
+        .then(() => {
+          notify(t('Copied to clipboard'))
+        })
+        .catch(() => {
+          if (copyWithExecCommand()) {
+            notify(t('Copied to clipboard'))
+          } else {
+            notifyCopyError()
+          }
+        })
+      return
+    }
+
+    if (copyWithExecCommand()) {
+      notify(t('Copied to clipboard'))
+    } else {
+      notifyCopyError()
+    }
+  }
+
   getRows() {
-    return this.state.rows.map((exportData) => [
-      EXPORT_TYPES[exportData.data.type]?.label,
-      formatTime(exportData.date_created),
-      this.renderLanguage(exportData.data.lang),
-      <Text key='include-groups' ta='center'>
-        {this.renderBooleanAnswer(exportData.data.hierarchy_in_labels)}
-      </Text>,
-      <Text key='multiple-versions' ta='center'>
-        {this.renderBooleanAnswer(exportData.data.fields_from_all_versions)}
-      </Text>,
-      <Flex gap='xs' justify='flex-end' align='center' direction='row' wrap='nowrap' key='buttons'>
-        {exportData.status === ExportStatusName.complete && (
-          <Button
-            type='secondary'
-            size='m'
-            startIcon='download'
-            label={t('Download')}
-            onClick={() => {
-              if (exportData.result !== null) {
-                window.open(exportData.result, '_blank')
-              }
-            }}
-          />
-        )}
+    return this.state.rows.map((exportData) => {
+      const matchingExportSetting = this.findMatchingExportSetting(exportData)
 
-        {exportData.status === ExportStatusName.error && (
-          <span className='right-tooltip' data-tip={exportData.messages?.error}>
-            {t('Export Failed')}
-          </span>
-        )}
+      return [
+        EXPORT_TYPES[exportData.data.type]?.label,
+        formatTime(exportData.date_created),
+        this.renderLanguage(exportData.data.lang),
+        <Text key='include-groups' ta='center'>
+          {this.renderBooleanAnswer(exportData.data.hierarchy_in_labels)}
+        </Text>,
+        <Text key='multiple-versions' ta='center'>
+          {this.renderBooleanAnswer(exportData.data.fields_from_all_versions)}
+        </Text>,
+        <Flex gap='xs' justify='flex-end' align='center' direction='row' wrap='wrap' key='buttons'>
+          {exportData.status === ExportStatusName.complete &&
+            matchingExportSetting &&
+            this.isSyncLinkSupported(exportData.data.type) && (
+              <>
+                <Button
+                  type='secondary'
+                  size='s'
+                  label={t('Copy CSV Sync Link')}
+                  onClick={() => {
+                    this.copySyncLink(matchingExportSetting.data_url_csv)
+                  }}
+                />
 
-        {exportData.status !== ExportStatusName.complete && exportData.status !== ExportStatusName.error && (
-          <span className='animate-processing'>{t('Processing…')}</span>
-        )}
+                <Button
+                  type='secondary'
+                  size='s'
+                  label={t('Copy XLSX Sync Link')}
+                  onClick={() => {
+                    this.copySyncLink(matchingExportSetting.data_url_xlsx)
+                  }}
+                />
+              </>
+            )}
 
-        {userCan(PERMISSIONS_CODENAMES.view_submissions, this.props.asset) && (
-          <Button
-            type='secondary-danger'
-            size='m'
-            startIcon='trash'
-            onClick={this.deleteExport.bind(this, exportData.uid)}
-          />
-        )}
-      </Flex>,
-    ])
+          {exportData.status === ExportStatusName.complete && (
+            <Button
+              type='secondary'
+              size='m'
+              startIcon='download'
+              label={t('Download')}
+              onClick={() => {
+                if (exportData.result !== null) {
+                  window.open(exportData.result, '_blank')
+                }
+              }}
+            />
+          )}
+
+          {exportData.status === ExportStatusName.error && (
+            <span className='right-tooltip' data-tip={exportData.messages?.error}>
+              {t('Export Failed')}
+            </span>
+          )}
+
+          {exportData.status !== ExportStatusName.complete && exportData.status !== ExportStatusName.error && (
+            <span className='animate-processing'>{t('Processing…')}</span>
+          )}
+
+          {userCan(PERMISSIONS_CODENAMES.view_submissions, this.props.asset) && (
+            <Button
+              type='secondary-danger'
+              size='m'
+              startIcon='trash'
+              onClick={this.deleteExport.bind(this, exportData.uid)}
+            />
+          )}
+        </Flex>,
+      ]
+    })
   }
 
   render() {
