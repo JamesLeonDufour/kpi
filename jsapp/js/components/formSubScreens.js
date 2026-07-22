@@ -21,6 +21,9 @@ import LimitNotifications from './usageLimits/limitNotifications.component'
 const ConnectProjects = React.lazy(
   () => import(/* webpackPrefetch: true */ '#/components/dataAttachments/connectProjects'),
 )
+const CaseManagementSettings = React.lazy(
+  () => import(/* webpackPrefetch: true */ '#/components/caseData/caseManagementSettings'),
+)
 const DataTable = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/submissions/DataTableWrapper'))
 const ProjectDownloads = React.lazy(
   () => import(/* webpackPrefetch: true */ '#/components/projectDownloads/ProjectDownloads'),
@@ -80,6 +83,14 @@ export class FormSubScreens extends React.Component {
           return this.renderSharing()
         case ROUTES.FORM_RECORDS.replace(':uid', this.state.uid):
           return this.renderRecords()
+        case ROUTES.FORM_CASE_MGMT.replace(':uid', this.state.uid):
+          return (
+            <bem.FormView className='case-management-settings'>
+              <Suspense fallback={null}>
+                <CaseManagementSettings asset={this.state} />
+              </Suspense>
+            </bem.FormView>
+          )
         case ROUTES.FORM_REST.replace(':uid', this.state.uid):
           return <RESTServices asset={this.state} />
         case ROUTES.FORM_REST_HOOK.replace(':uid', this.state.uid).replace(':hookUid', this.props.params.hookUid):

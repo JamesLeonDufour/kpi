@@ -1,0 +1,258 @@
+// Styles for the Case Data (case management) section
+
+.caseDataRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #f8f8f8;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.headerTitle {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel {
+  background-color: #fff;
+  border: 1px solid #e6e6e6;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.panelTitle {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  color: #696969;
+}
+
+.tablesList {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #696969;
+    padding: 8px 12px;
+    border-bottom: 2px solid #e6e6e6;
+  }
+
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #efefef;
+    font-size: 14px;
+  }
+
+  tr:hover td {
+    background-color: #f4f9ff;
+  }
+}
+
+.tableName {
+  color: #2095f3;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.grid {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.gridTable {
+  border-collapse: collapse;
+  min-width: 100%;
+
+  th {
+    position: sticky;
+    top: 0;
+    background-color: #38434e;
+    color: #fff;
+    font-size: 12px;
+    padding: 8px 12px;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th.keyColumn {
+    background-color: #253544;
+  }
+
+  td {
+    border: 1px solid #e6e6e6;
+    padding: 0;
+    font-size: 13px;
+    min-width: 120px;
+    background-color: #fff;
+  }
+
+  td.keyColumn {
+    background-color: #f4f6f8;
+    font-weight: 600;
+    padding: 6px 12px;
+  }
+}
+
+.cellDisplay {
+  display: block;
+  padding: 6px 12px;
+  min-height: 30px;
+  cursor: cell;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.cellInput {
+  width: 100%;
+  border: 2px solid #2095f3;
+  padding: 4px 10px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.actionButton {
+  background-color: #2095f3;
+  color: #fff;
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #1876c4;
+  }
+
+  &:disabled {
+    background-color: #b9b9b9;
+    cursor: not-allowed;
+  }
+}
+
+.secondaryButton {
+  background-color: transparent;
+  color: #2095f3;
+  border: 1px solid #2095f3;
+  border-radius: 4px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #eaf5fe;
+  }
+}
+
+.dangerButton {
+  background-color: transparent;
+  color: #d43f3a;
+  border: 1px solid #d43f3a;
+  border-radius: 4px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #fdeeee;
+  }
+}
+
+.textInput {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.formLabel {
+  font-size: 13px;
+  color: #555;
+  min-width: 170px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #8a8a8a;
+  margin: 4px 0 0;
+}
+
+.linksList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #efefef;
+    font-size: 13px;
+  }
+}
+
+.badge {
+  display: inline-block;
+  background-color: #e0f0fd;
+  color: #1876c4;
+  font-size: 11px;
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-left: 6px;
+}
+
+.emptyMessage {
+  color: #8a8a8a;
+  font-size: 14px;
+  padding: 24px;
+  text-align: center;
+}
+
+.sidebarInfo {
+  padding: 16px;
+  font-size: 13px;
+  color: #555;
+  line-height: 1.5;
+}

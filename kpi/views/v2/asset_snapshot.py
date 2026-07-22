@@ -426,6 +426,9 @@ class AssetSnapshotViewSet(OpenRosaViewSetMixin, AuditLoggedNoUpdateModelViewSet
             paired_data.void_external_xml_cache()
             files.append(paired_data)
 
+        # case-management links serve their CSV live, no cache to void
+        files.extend(asset.case_links.select_related('case_table').all())
+
         context = {'request': request}
         serializer = ManifestSerializer(files, many=True, context=context)
 

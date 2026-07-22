@@ -1,4 +1,4 @@
-@use 'scss/colors';
+﻿@use 'scss/colors';
 @use 'scss/z-indexes';
 @use 'scss/breakpoints';
 @use 'js/components/common/checkbox';
@@ -534,3 +534,21 @@ $s-data-table-font: 13px;
     @include mixins.undoTextEllipsis;
   }
 }
+
+// Case-management: joined case table columns are tinted so they are
+// immediately distinguishable from the submission's own columns.
+.form-view--table {
+  .rt-th.case-data-column {
+    background-color: #7a5195 !important;
+    color: #fff;
+  }
+
+  .rt-td.case-data-column {
+    background-color: #f3ecf8;
+  }
+
+  .case-data-column-header .column-header-title {
+    color: inherit;
+  }
+}
+

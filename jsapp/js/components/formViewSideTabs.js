@@ -124,6 +124,14 @@ class FormViewSideTabs extends Reflux.Component {
         })
       }
 
+      if (userCan(PERMISSIONS_CODENAMES.manage_asset, this.state.asset)) {
+        sideTabs.push({
+          label: t('Case Management'),
+          icon: 'k-icon k-icon-case-management',
+          path: ROUTES.FORM_CASE_MGMT.replace(':uid', this.state.asset.uid),
+        })
+      }
+
       if (
         (this.state.asset.deployment__active ||
           // REST services should be visible for archived forms but not drafts

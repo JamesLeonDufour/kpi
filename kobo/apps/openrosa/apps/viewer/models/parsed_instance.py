@@ -12,6 +12,7 @@ from pymongo import UpdateOne
 from pymongo.errors import PyMongoError
 
 from kobo.apps.hook.utils.services import call_services
+from kobo.apps.kobo_cases.utils import schedule_case_write_back
 from kobo.apps.openrosa.apps.logger.models import Attachment, Instance, XForm
 from kobo.apps.openrosa.apps.logger.models.attachment import AttachmentDeleteStatus
 from kobo.apps.openrosa.apps.logger.xform_instance_parser import add_uuid_prefix
@@ -438,6 +439,13 @@ class ParsedInstance(models.Model):
                 # services might be called before the instance is fully saved
                 get_connection(settings.OPENROSA_DB_ALIAS).on_commit(
                     lambda: call_services(asset_uid, self.instance_id)
+                )
+                # Case-management write-back: apply this submission to any
+                # case table linked to the project
+                get_connection(settings.OPENROSA_DB_ALIAS).on_commit(
+                    lambda: schedule_case_write_back(
+                        asset_uid, self.instance_id
+                    )
                 )
 
         return success

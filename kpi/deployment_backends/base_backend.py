@@ -820,7 +820,12 @@ class BaseDeploymentBackend(abc.ABC):
                 file_type=AssetFile.FORM_MEDIA
             ).order_by('date_deleted')
         else:
-            queryset = PairedData.objects(self.asset).values()
+            queryset = list(PairedData.objects(self.asset).values())
+            # Case-management links behave like paired data: a remote URL
+            # media file whose hash follows the case table's data version
+            queryset.extend(
+                self.asset.case_links.select_related('case_table').all()
+            )
             return queryset
 
     def _inject_properties(

@@ -149,6 +149,7 @@ INSTALLED_APPS = (
     'kobo.apps.project_ownership.app.ProjectOwnershipAppConfig',
     'kobo.apps.long_running_migrations.app.LongRunningMigrationAppConfig',
     'kobo.apps.user_reports.apps.UserReportsConfig',
+    'kobo.apps.kobo_cases.apps.KoboCasesAppConfig',
     'drf_spectacular',
     'csp',
 )

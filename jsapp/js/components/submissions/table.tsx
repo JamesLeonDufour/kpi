@@ -97,6 +97,8 @@ import envStore from '#/envStore'
 import pageState from '#/pageState.store'
 import type { PageStateStoreState } from '#/pageState.store'
 import { addDefaultUuidPrefix, matchUuid, notify, recordKeys } from '#/utils'
+import type { CaseLink } from '#/components/caseData/caseDataApi'
+import { asResults, getAssetCaseLinks, getCaseRecords } from '#/components/caseData/caseDataApi'
 import ActionIcon from '../common/ActionIcon'
 import LimitNotifications from '../usageLimits/limitNotifications.component'
 import { openBulkApproveModal } from './BulkProcessingModals/BulkApproveModal'
@@ -162,6 +164,14 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
 
   private unlisteners: Function[] = []
 
+  /**
+   * Case-management: first case link of this project (if any) and the linked
+   * case table's records, indexed by case key. Used to display live case
+   * columns alongside submission data.
+   */
+  private caseLink: CaseLink | null = null
+  private caseRecordsByKey: Map<string, { [column: string]: string }> = new Map()
+
   constructor(props: DataTableProps) {
     super(props)
     this.state = {
@@ -209,6 +219,56 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
       actions.submissions.bulkPatchValues.completed.listen(this.onBulkChangeCompleted.bind(this)),
       actions.submissions.bulkDelete.completed.listen(this.onBulkChangeCompleted.bind(this)),
     )
+
+    this.loadCaseData()
+  }
+
+  /**
+   * Case-management: fetches this project's case link and the linked table's
+   * records, then rebuilds columns so the case data shows up in the table.
+   */
+  loadCaseData() {
+    getAssetCaseLinks(this.props.asset.uid)
+      .then((response) => {
+        const links = asResults(response)
+        if (links.length === 0) {
+          return
+        }
+        this.caseLink = links[0]
+        getCaseRecords(links[0].case_table)
+          .then((recordsResponse) => {
+            this.caseRecordsByKey = new Map(recordsResponse.results.map((record) => [record.key, record.data]))
+            this._prepColumns(this.state.submissions)
+          })
+          .catch(() => {
+            // Viewer cannot read the case table (it belongs to another user);
+            // simply skip the case columns.
+          })
+      })
+      .catch(() => {
+        // No access to case links — nothing to display.
+      })
+  }
+
+  /**
+   * Case-management: find the submitted case id for a submission row,
+   * matching by exact xpath first and question name as fallback.
+   */
+  getSubmissionCaseId(submission: SubmissionResponse): string | null {
+    if (!this.caseLink) {
+      return null
+    }
+    const xpath = this.caseLink.case_id_xpath
+    const asRecord = submission as unknown as { [key: string]: unknown }
+    if (typeof asRecord[xpath] === 'string') {
+      return asRecord[xpath] as string
+    }
+    for (const key of Object.keys(asRecord)) {
+      if (!key.startsWith('_') && key.split('/').pop() === xpath && typeof asRecord[key] === 'string') {
+        return asRecord[key] as string
+      }
+    }
+    return null
   }
 
   componentWillUnmount() {
@@ -1037,6 +1097,41 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
       return false
     })
 
+    // Case-management: append the linked case table's columns at the very
+    // end, visually distinct, joined live by the submission's case id.
+    if (this.caseLink) {
+      const caseTableDetail = this.caseLink.case_table_detail
+      const caseTableName = caseTableDetail?.name || t('Case data')
+      const caseColumns = caseTableDetail?.columns || []
+      caseColumns.forEach((caseColumn, caseColumnIndex) => {
+        const columnLabel = caseColumn.label || caseColumn.name
+        columnsToRender.push({
+          Header: () => (
+            <div className='column-header-wrapper case-data-column-header'>
+              <span className='column-header-title' title={`${caseTableName}: ${columnLabel}`}>
+                {columnLabel}
+              </span>
+            </div>
+          ),
+          id: `__case__/${caseColumn.name}`,
+          accessor: (row) => {
+            const caseId = this.getSubmissionCaseId(row)
+            if (caseId === null) {
+              return ''
+            }
+            return this.caseRecordsByKey.get(caseId)?.[caseColumn.name] ?? ''
+          },
+          index: `zz${caseColumnIndex.toString().padStart(4, '0')}`,
+          filterable: false,
+          sortable: false,
+          className: 'case-data-column',
+          headerClassName: 'case-data-column',
+          width: DEFAULT_DATA_CELL_WIDTH,
+          Cell: (row: CellInfo) => <span className='case-data-cell-value'>{row.value}</span>,
+        })
+      })
+    }
+
     // Apply stored indexes to all columns to sort them.
     // NOTE: frozen column index stay as is, it is being moved to the beginning
     // of table using CSS styling.
@@ -1087,6 +1182,11 @@ export class DataTable extends React.Component<DataTableProps, DataTableState> {
       columnsToRender = columnsToRender.filter((el) => {
         // always include checkbox column
         if (el.id === SUBMISSION_ACTIONS_ID) {
+          return true
+        }
+        // always include the joined case-management columns — they are not
+        // part of the survey, so they never appear in the columns selector
+        if (el.id.startsWith('__case__/')) {
           return true
         }
         return Boolean(el.id && selectedColumnsIds.includes(el.id) !== false)

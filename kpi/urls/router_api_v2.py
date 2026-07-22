@@ -6,6 +6,11 @@ from kobo.apps.audit_log.urls import router as audit_log_router
 from kobo.apps.audit_log.views import ProjectHistoryLogViewSet
 from kobo.apps.hook.views.v2.hook import HookViewSet
 from kobo.apps.hook.views.v2.hook_log import HookLogViewSet
+from kobo.apps.kobo_cases.views import (
+    CaseLinkViewSet,
+    CaseRecordViewSet,
+    CaseTableViewSet,
+)
 from kobo.apps.languages.urls import router as language_router
 from kobo.apps.organizations.views import (
     OrganizationMemberViewSet,
@@ -137,6 +142,13 @@ asset_routes.register(
 )
 
 asset_routes.register(
+    r'case-links',
+    CaseLinkViewSet,
+    basename='case-link',
+    parents_query_lookups=['asset'],
+)
+
+asset_routes.register(
     r'history',
     ProjectHistoryLogViewSet,
     basename='history',
@@ -204,6 +216,19 @@ hook_routes.register(
     HookLogViewSet,
     basename='hook-log',
     parents_query_lookups=['asset', 'hook'],
+)
+
+case_table_routes = router_api_v2.register(
+    r'case-tables',
+    CaseTableViewSet,
+    basename='case-table',
+)
+
+case_table_routes.register(
+    r'records',
+    CaseRecordViewSet,
+    basename='case-record',
+    parents_query_lookups=['table'],
 )
 
 router_api_v2.register(r'asset_snapshots', AssetSnapshotViewSet)

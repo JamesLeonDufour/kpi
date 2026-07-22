@@ -14,6 +14,7 @@ import sessionStore from '../stores/session'
 import Icon from './common/icon'
 
 const AccountSidebar = lazy(() => import('#/account/accountSidebar'))
+const CaseDataSidebar = lazy(() => import('#/components/caseData/caseDataSidebar'))
 
 /**
  * This components display the left side UI sidebar, namely these parts:
@@ -31,6 +32,7 @@ export default function Drawer() {
   const location = useLocation()
   const isAccount = location.pathname.startsWith(ROUTES.ACCOUNT_ROOT)
   const isLibrary = location.pathname.startsWith(ROUTES.LIBRARY)
+  const isCaseData = location.pathname.startsWith(ROUTES.CASE_DATA)
 
   function openNewFormModal(evt: React.MouseEvent<HTMLButtonElement>) {
     evt.preventDefault()
@@ -57,6 +59,10 @@ export default function Drawer() {
         <NavLink to={ROUTES.LIBRARY} className='k-drawer__link' data-tip={t('Library')}>
           <Icon name='library' size='inherit' />
         </NavLink>
+
+        <NavLink to={ROUTES.CASE_DATA} className='k-drawer__link' data-tip={t('Case Data')}>
+          <Icon name='case-management' size='inherit' />
+        </NavLink>
       </bem.KDrawer__primaryIcons>
 
       <bem.KDrawer__sidebar>
@@ -74,7 +80,15 @@ export default function Drawer() {
           </Suspense>
         )}
 
-        {!isLibrary && !isAccount && (
+        {isCaseData && (
+          <bem.FormSidebarWrapper>
+            <Suspense fallback={null}>
+              <CaseDataSidebar />
+            </Suspense>
+          </bem.FormSidebarWrapper>
+        )}
+
+        {!isLibrary && !isAccount && !isCaseData && (
           <bem.FormSidebarWrapper>
             {/* For CSS flex's sake */}
             <div>

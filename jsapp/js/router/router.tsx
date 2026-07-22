@@ -16,6 +16,8 @@ import RequireAuth from './requireAuth'
 import { PROJECTS_ROUTES, ROUTES } from './routerConstants'
 
 const Reports = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/reports/reports'))
+const CaseDataRoute = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/caseData/caseDataRoute'))
+const CaseTableRoute = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/caseData/caseTableRoute'))
 const FormLanding = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/formLanding/formLanding'))
 const FormSummary = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/formSummary/formSummary'))
 const FormSubScreens = React.lazy(() => import(/* webpackPrefetch: true */ '#/components/formSubScreens'))
@@ -30,6 +32,26 @@ export const router = createHashRouter(
       <Route path={ROUTES.ROOT} element={<Navigate to={ROUTES.FORMS} replace />} />
       <Route path={ROUTES.ACCOUNT_ROOT}>{accountRoutes()}</Route>
       {projectsRoutes()}
+      <Route
+        path={ROUTES.CASE_DATA}
+        element={
+          <RequireAuth>
+            <Suspense fallback={null}>
+              <CaseDataRoute />
+            </Suspense>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path={ROUTES.CASE_TABLE}
+        element={
+          <RequireAuth>
+            <Suspense fallback={null}>
+              <CaseTableRoute />
+            </Suspense>
+          </RequireAuth>
+        }
+      />
       <Route path={ROUTES.LIBRARY}>
         <Route path='' element={<Navigate to={ROUTES.MY_LIBRARY} replace />} />
         <Route
@@ -209,6 +231,15 @@ export const router = createHashRouter(
                 <PermProtectedRoute
                   protectedComponent={FormSubScreens}
                   requiredPermissions={[PERMISSIONS_CODENAMES.change_asset]}
+                />
+              }
+            />
+            <Route
+              path={ROUTES.FORM_CASE_MGMT}
+              element={
+                <PermProtectedRoute
+                  protectedComponent={FormSubScreens}
+                  requiredPermissions={[PERMISSIONS_CODENAMES.manage_asset]}
                 />
               }
             />
