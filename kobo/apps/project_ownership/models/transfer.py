@@ -9,7 +9,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext_noop as t
 
-from kobo.apps.help.models import InAppMessage, InAppMessageUsers
+from kobo.apps.help.models import InAppMessage, InAppMessageUsers, MessageType
 from kobo.apps.openrosa.apps.logger.models import XForm
 from kobo.apps.organizations.utils import get_real_owner
 from kpi.constants import PERM_MANAGE_ASSET
@@ -18,12 +18,14 @@ from kpi.exceptions import InvalidXFormException, MissingXFormException
 from kpi.fields import KpiUidField
 from kpi.models import Asset, AssetUserPartialPermission, ObjectPermission
 from kpi.models.abstract_models import AbstractTimeStampedModel
+from kpi.utils.log import logging
 from ..exceptions import TransferAlreadyProcessedException
 from ..tasks import async_task, send_email_to_admins
 from ..utils import get_target_folder
 from .choices import (
     InviteStatusChoices,
     TransferStatusChoices,
+    TransferStatusErrorLevelChoices,
     TransferStatusTypeChoices,
 )
 from .invite import Invite, InviteType, OrgMembershipAutoInvite
@@ -54,7 +56,7 @@ class Transfer(AbstractTimeStampedModel):
     )
 
     class Meta:
-        verbose_name = 'project ownership transfer'
+        verbose_name = 'transfer'
 
     def __str__(self) -> str:
         return (
@@ -289,6 +291,7 @@ class Transfer(AbstractTimeStampedModel):
                 + timedelta(days=config.PROJECT_OWNERSHIP_IN_APP_MESSAGES_EXPIRY),
                 last_editor=self.invite.sender,
                 generic_related_objects={transfer_identifier: self.pk},
+                message_type=MessageType.TRANSFER,
             )
 
             InAppMessageUsers.objects.bulk_create(
@@ -415,14 +418,14 @@ class TransferStatus(AbstractTimeStampedModel):
             transfer_status = cls.objects.select_for_update().get(
                 transfer_id=transfer_id, status_type=status_type
             )
-            if (
-                transfer_status.status == TransferStatusChoices.SUCCESS
-                and status != TransferStatusChoices.SUCCESS
-            ):
-                cls._add_error(
-                    transfer_status,
-                    f'Updating status of previously successful transfer to {status}',
+            # `success` is terminal: a late or duplicate retry must not
+            # downgrade it, nor flip the invite to `failed`.
+            if transfer_status.status == TransferStatusChoices.SUCCESS:
+                logging.warning(
+                    f'Ignored update of successful {status_type} status to '
+                    f'{status} for transfer #{transfer_id}'
                 )
+                return
             transfer_status.status = status
             transfer_status.date_modified = timezone.now()
             if error:
@@ -449,10 +452,15 @@ class TransferStatus(AbstractTimeStampedModel):
             self.transfer.status = TransferStatusChoices.SUCCESS
 
     @classmethod
-    def _add_error(cls, transfer_status, error):
+    def _add_error(
+        cls,
+        transfer_status,
+        error,
+        level=TransferStatusErrorLevelChoices.ERROR,
+    ):
         if error:
             TransferStatusError.objects.create(
-                transfer_status=transfer_status, error=error
+                transfer_status=transfer_status, error=error, level=level
             )
 
 
@@ -461,3 +469,14 @@ class TransferStatusError(AbstractTimeStampedModel):
         TransferStatus, related_name='errors', on_delete=models.CASCADE
     )
     error = models.CharField(null=True, blank=True)
+    # Skips vastly outnumber errors, so filtering on `error` is selective.
+    # Index is created concurrently, see migration 0008.
+    level = models.CharField(
+        max_length=7,
+        choices=TransferStatusErrorLevelChoices.choices,
+        default=TransferStatusErrorLevelChoices.ERROR,
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = 'log'

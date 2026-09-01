@@ -17,13 +17,18 @@ class ExtraUserDetail(StandardizeSearchableFieldMixin, models.Model):
         related_name='extra_details',
         on_delete=models.CASCADE,
     )
-    data = models.JSONField(default=dict)
+    data = models.JSONField(default=dict, blank=True)
     private_data = models.JSONField(default=dict, blank=True)
     date_removal_requested = models.DateTimeField(null=True, blank=True)
     date_removed = models.DateTimeField(null=True, blank=True)
     password_date_changed = models.DateTimeField(null=True, blank=True)
     validated_password = models.BooleanField(default=True)
     last_project_activity = models.DateTimeField(null=True, blank=True, db_index=True)
+    sso_exempt = models.BooleanField(
+        default=False,
+        verbose_name='SSO exempt',
+        help_text='Exempt from managed-SSO-only login',
+    )
 
     def __str__(self):
         return "{}'s data: {}".format(self.user.__str__(), repr(self.data))

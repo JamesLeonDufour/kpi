@@ -12,12 +12,14 @@ import DeleteAccountBanner from './DeleteAccountBanner'
 const meta: Meta<typeof DeleteAccountBanner> = {
   title: 'Components/DeleteAccountBanner',
   component: DeleteAccountBanner,
+  // Docs view doesn't work :sadface: :angryface: --> turning it off
+  tags: ['!autodocs'],
   argTypes: {},
   parameters: {
     msw: {
       handlers: [organizationMock(), assetsMock()],
     },
-    a11y: { test: 'todo' },
+    a11y: { disable: true },
   },
   decorators: [
     (Story) => (

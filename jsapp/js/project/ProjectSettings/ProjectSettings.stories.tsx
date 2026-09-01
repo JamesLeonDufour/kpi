@@ -107,7 +107,7 @@ const meta: Meta<typeof ProjectSettingsWrapper> = {
   },
   parameters: {
     layout: 'padded',
-    a11y: { test: 'todo' },
+    a11y: { disable: true },
     msw: {
       handlers: [environmentMock, assetsMock()],
     },
@@ -269,13 +269,10 @@ export const SettingsRoute_EditProject: StoryObj = {
     const projectFields: ProjectSettingsFields = {
       name: 'Community Health Survey',
       description: 'A survey for tracking community health indicators',
-      sector: { value: 'Health Services / Public Health', label: 'Health Services / Public Health' },
-      country: [
-        { value: 'USA', label: 'United States' },
-        { value: 'CAN', label: 'Canada' },
-      ],
+      sector: 'Health Services / Public Health',
+      country: ['USA', 'CAN'],
       operational_purpose: null,
-      collects_pii: { value: 'yes', label: 'Yes' },
+      collects_pii: 'Yes',
       extra_metadata_fields: {},
     }
 

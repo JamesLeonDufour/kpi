@@ -1,6 +1,6 @@
 /**
  * This is intended to be displayed in multiple places:
- * - library item page (AssetRoute)
+ * - library item page (LibraryItemRoute)
  * - library table of items (AssetsTable row)
  */
 import './assetActionButtons.scss'
@@ -38,6 +38,7 @@ interface AssetActionButtonsProps extends WithRouterProps {
   asset: AssetResponse
   has_deployment?: boolean
   deployment__active?: boolean
+  withinRow?: boolean
 }
 
 interface AssetActionButtonsState {
@@ -102,7 +103,7 @@ class AssetActionButtons extends React.Component<AssetActionButtonsProps, AssetA
   }
 
   share() {
-    manageAssetSharing(this.props.asset.uid)
+    manageAssetSharing(this.props.asset)
   }
 
   showTagsModal() {
@@ -152,13 +153,13 @@ class AssetActionButtons extends React.Component<AssetActionButtonsProps, AssetA
     actions.library.unsubscribeFromCollection(this.props.asset.uid)
   }
 
-  viewContainingCollection() {
+  getContainingCollectionLink() {
     if (this.props.asset.parent === null) {
-      return
+      return null
     }
     const parentArr = this.props.asset.parent.split('/')
     const parentAssetUid = parentArr[parentArr.length - 2]
-    this.props.router.navigate(ROUTES.LIBRARY_ITEM.replace(':uid', parentAssetUid))
+    return ROUTES.LIBRARY_ITEM.replace(':uid', parentAssetUid)
   }
 
   getFormBuilderLink() {
@@ -224,6 +225,7 @@ class AssetActionButtons extends React.Component<AssetActionButtonsProps, AssetA
     const hasDetailsEditable = assetType === ASSET_TYPES.template.id || assetType === ASSET_TYPES.collection.id
 
     const routeAssetUid = getRouteAssetUid()
+    const containingCollectionLink = this.getContainingCollectionLink()
 
     return (
       <menu className='asset-action-buttons'>
@@ -290,16 +292,20 @@ class AssetActionButtons extends React.Component<AssetActionButtonsProps, AssetA
           />
         )}
 
-        {routeAssetUid && this.props.asset.parent !== null && !this.props.asset.parent.includes(routeAssetUid) && (
-          <Button
-            type='text'
-            size='m'
-            onClick={this.viewContainingCollection.bind(this)}
-            tooltip={t('View containing Collection')}
-            tooltipPosition='right'
-            startIcon='folder'
-          />
-        )}
+        {routeAssetUid &&
+          this.props.asset.parent !== null &&
+          !this.props.asset.parent.includes(routeAssetUid) &&
+          containingCollectionLink !== null && (
+            <Link to={containingCollectionLink}>
+              <Button
+                type='text'
+                size='m'
+                tooltip={t('View containing Collection')}
+                tooltipPosition='right'
+                startIcon='folder'
+              />
+            </Link>
+          )}
 
         <AssetMoreActions
           asset={this.props.asset}
@@ -307,6 +313,7 @@ class AssetActionButtons extends React.Component<AssetActionButtonsProps, AssetA
           onEditLanguages={this.editLanguages}
           onMoveToCollection={this.moveToCollection}
           onDelete={this.delete}
+          withinRow={this.props.withinRow}
         />
       </menu>
     )

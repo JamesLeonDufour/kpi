@@ -1,10 +1,8 @@
 import { Dialog, Group, Stack, type TooltipProps } from '@mantine/core'
-// Leaflet
-// TODO: use something diifferent than leaflet-omnivore as it is not maintained
-// and last realease was 8(!) years ago.
-import omnivore, { type OmnivoreFunction } from '@mapbox/leaflet-omnivore'
+import { kml as toGeoJsonKml } from '@tmcw/togeojson'
 import JSZip from 'jszip'
-import L, { type LayerGroup } from 'leaflet'
+import L from 'leaflet'
+import Papa from 'papaparse'
 // Libraries
 import React from 'react'
 import bem from '../../../js/bem'
@@ -21,6 +19,8 @@ import CenteredMessage from '../../../js/components/common/centeredMessage.compo
 import Modal from '../../../js/components/common/modal'
 // Partial components
 import MapSettings from './MapSettings'
+import { type PlottedPoint, getPlottedPoints, getPointsBounds } from './mapUtils'
+import { WorldCopies } from './worldCopies'
 
 import { actions } from '../../../js/actions'
 import { getRowName, getSurveyFlatPaths } from '../../../js/assetUtils'
@@ -28,7 +28,7 @@ import { getRowName, getSurveyFlatPaths } from '../../../js/assetUtils'
 import { dataInterface } from '../../../js/dataInterface'
 import pageState from '../../../js/pageState.store'
 import { type WithRouterProps, withRouter } from '../../../js/router/legacy'
-import { findFirstGeopoint, notify, parseLatLng, recordKeys } from '../../../js/utils'
+import { findFirstGeopoint, notify, recordKeys } from '../../../js/utils'
 
 // Constants and types
 import { ASSET_FILE_TYPES, MODAL_TYPES, QUERY_LIMIT_DEFAULT, isMapDisplayableGeopointType } from '../../../js/constants'
@@ -45,10 +45,15 @@ import type {
 import './map.scss'
 import './map.marker-colors.scss'
 import type { DataResponse } from '#/api/models/dataResponse'
-import { fetchGetUrl } from '../../../js/api'
 
-const SUBMISSIONS_PER_PAGE = 1000
+export const SUBMISSIONS_PER_PAGE = 1000
 const MAX_SUBMISSIONS = 30 * SUBMISSIONS_PER_PAGE // Don't want more than 30 parallel queries
+
+/** Room left around the plotted points, so that the outermost markers aren't drawn half way off the map. */
+const FIT_BOUNDS_PADDING: L.PointTuple = [32, 32]
+
+/** Class hiding the markers of the legend entries the user has filtered out. */
+const UNSELECTED_MARKER_CLASS = 'unselected'
 
 const STREETS_LAYER = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -112,7 +117,17 @@ type MarkerMap = Array<{
 
 type MapValueCounts = Record<string, { count: number; id: number }>
 
-// Function to validate GeoJSON object
+function parseKmlDom(dom: Document): GeoJSON.GeoJsonObject {
+  if (dom.getElementsByTagName('parsererror').length > 0) {
+    throw new Error(t('Could not parse KML file'))
+  }
+  const result = toGeoJsonKml(dom)
+  if (!result.features.length) {
+    throw new Error(t('KML contained no features'))
+  }
+  return result as GeoJSON.GeoJsonObject
+}
+
 function isValidGeoJSON(geojson: string): boolean {
   try {
     return Boolean(check(geojson))
@@ -123,8 +138,6 @@ function isValidGeoJSON(geojson: string): boolean {
 }
 
 const OVERLAY_ERROR = t('Error loading overlay layer "##name##"')
-const OVERLAY_ERROR_INVALID_GEOJSON = t('Error loading overlay layer "##name##" (invalid GeoJSON)')
-const OVERLAY_ERROR_OMNIVORE = t('Error loading overlay layer "##name##" (omnivore error)')
 
 interface FormMapProps extends WithRouterProps {
   asset: AssetResponse
@@ -185,6 +198,9 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
   private unlisteners: Function[] = []
   private lastRenderedBoundsSignature?: string
 
+  /** Repeats the markers across the copies of the world the map shows. Replaced whenever the marker group is. */
+  private worldCopies?: WorldCopies
+
   private syncLegendViewportListeners() {
     const shouldListen = Boolean(this.state.markerMap) && this.state.markersVisible && this.state.showExpandedLegend
     if (shouldListen === this.viewportListenersActive) {
@@ -234,6 +250,8 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     if (this.mapContainerEl) {
       this.mapContainerEl.removeEventListener('wheel', this.onMapPinchZoom)
     }
+    // Has to go before the map does, as it asks the map about its bounds
+    this.worldCopies?.destroy()
     if (this.state.map) {
       this.state.map.remove()
     }
@@ -334,113 +352,109 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
    */
   addNewLayers(files: AssetFileResponse[]) {
     files.forEach((layer) => {
-      // Step 1. Verify file type is ok - we are only interested in files that are map layers
       if (layer.file_type !== 'map_layer') {
         return
       }
 
-      // Step 2. Ensure the layer is not already loaded
       const hasLayer = this.controls._layers.some((controlLayer) => controlLayer.name === layer.description)
       if (hasLayer) {
         return
       }
 
-      // Step 3: Identify omnivore function to be used
-      let overlayLayer: LayerGroup | undefined
-      let omnivoreFn: OmnivoreFunction | undefined
-      switch (layer.metadata.type) {
-        case 'kml':
-          omnivoreFn = omnivore.kml
-          break
-        case 'csv':
-          omnivoreFn = omnivore.csv
-          break
-        case 'json':
-        case 'geojson':
-          // Step 3.1: Special case for GeoJSON files
-          // We need to ensure the file is valid before passing it to omnivore, as omnivore doesn't handle invalid
-          // GeoJSON well, resulting in UI crashing.
-          try {
-            fetchGetUrl<object>(layer.content)
-              .then((response) => {
-                if (isValidGeoJSON(JSON.stringify(response))) {
-                  overlayLayer = omnivore
-                    // We have already loaded file content, but unfortunately omnivore doesn't support parsing JSON
-                    // strings for GeoJSON (it does support most of other types though…). So unfortunately we need to
-                    // make it load the file second time (`.geojson` does a call to fetch URL)
-                    .geojson(layer.content)
-                    .on('error', () => {
-                      notify.error(OVERLAY_ERROR_OMNIVORE.replace('##name##', layer.description))
-                    })
-                    .on('ready', () => {
-                      this.onOmnivoreLayerReady(overlayLayer, layer.description)
-                    })
-                } else {
-                  notify.error(OVERLAY_ERROR_INVALID_GEOJSON.replace('##name##', layer.description))
-                }
-              })
-              .catch((err) => {
-                console.error(err)
-                notify.error(OVERLAY_ERROR.replace('##name##', layer.description) + ' 1')
-              })
-          } catch (err) {
-            notify.error(OVERLAY_ERROR.replace('##name##', layer.description) + ' 2')
-          }
-          break
-        case 'wkt':
-          omnivoreFn = omnivore.wkt
-          break
-        case 'kmz':
-          // Step 3.2: Special case for KMZ files
-          // KMZ files are zipped KMLs, therefore we need to unzip the KMZ file in the browser and then feed
-          // the resulting text to map and controls
-          fetch(layer.content)
-            .then((response) => {
-              if (response.status === 200 || response.status === 0) {
-                return Promise.resolve(response.blob())
-              } else {
-                return Promise.reject(new Error(response.statusText))
-              }
-            })
-            .then(JSZip.loadAsync)
-            .then((zip) => zip.file('doc.kml')?.async('string'))
-            .then((kmlContent) => {
-              if (kmlContent && this.state.map) {
-                // We don't need to react to `.on('ready')` here, as KML file is already loaded and we just need to
-                // parse it (works synchronously)
-                const parsedOverlayLayer = omnivore.kml.parse(kmlContent)
-                this.onOmnivoreLayerReady(parsedOverlayLayer, layer.description)
-              }
-            })
-            .catch((err) => {
-              console.error(err)
-              notify.error(OVERLAY_ERROR.replace('##name##', layer.description) + ' 3')
-            })
-          break
-        default:
-          notify.error(OVERLAY_ERROR.replace('##name##', layer.description) + ' 4')
-          break
-      }
-
-      // Step 4: If this wasn't a special case, `omnivoreFn` should be ready to be used here, `onOmnivoreLayerReady`
-      // function handles the rest
-      if (omnivoreFn) {
-        overlayLayer = omnivoreFn(layer.content)
-          .on('error', () => {
-            notify.error(OVERLAY_ERROR_OMNIVORE.replace('##name##', layer.description))
-          })
-          .on('ready', () => {
-            this.onOmnivoreLayerReady(overlayLayer, layer.description)
-          })
-      }
+      this.loadOverlayLayer(layer).catch((err) => {
+        console.error(err)
+        const detail = err instanceof Error ? err.message : undefined
+        const message = OVERLAY_ERROR.replace('##name##', layer.description)
+        notify.error(detail ? `${message}: ${detail}` : message)
+      })
     })
   }
 
-  /**
-   * Handle map layer successfully loaded by omnivore.
-   */
-  onOmnivoreLayerReady(overlayLayer: LayerGroup | undefined, description: string) {
-    if (overlayLayer && this.state.map) {
+  async loadOverlayLayer(layer: AssetFileResponse) {
+    let geoJson: GeoJSON.GeoJsonObject | undefined
+
+    switch (layer.metadata.type) {
+      case 'kml': {
+        const response = await fetch(layer.content)
+        if (!response.ok) {
+          throw new Error(response.statusText)
+        }
+        const text = await response.text()
+        const dom = new DOMParser().parseFromString(text, 'text/xml')
+        geoJson = parseKmlDom(dom)
+        break
+      }
+      case 'csv': {
+        const response = await fetch(layer.content)
+        if (!response.ok) {
+          throw new Error(response.statusText)
+        }
+        const text = await response.text()
+        const parsed = Papa.parse<Record<string, string>>(text, { header: true, skipEmptyLines: true })
+        const latField = parsed.meta.fields?.find((f) => /^lat/i.test(f))
+        const lonField = parsed.meta.fields?.find((f) => /^lo?n/i.test(f))
+        if (!latField || !lonField) {
+          throw new Error(t('No latitude/longitude columns found'))
+        }
+        geoJson = {
+          type: 'FeatureCollection',
+          features: parsed.data
+            .filter((row) => row[latField] && row[lonField])
+            .map((row) => {
+              return {
+                type: 'Feature',
+                geometry: {
+                  type: 'Point',
+                  coordinates: [Number.parseFloat(row[lonField]), Number.parseFloat(row[latField])],
+                },
+                properties: row,
+              }
+            }),
+        } as GeoJSON.GeoJsonObject
+        break
+      }
+      case 'json':
+      case 'geojson': {
+        const response = await fetch(layer.content)
+        if (!response.ok) {
+          throw new Error(response.statusText)
+        }
+        const text = await response.text()
+        if (!isValidGeoJSON(text)) {
+          throw new Error(t('Invalid GeoJSON'))
+        }
+        geoJson = JSON.parse(text) as GeoJSON.GeoJsonObject
+        break
+      }
+      case 'kmz': {
+        // KMZ files are zipped KMLs — unzip in the browser then parse as KML
+        const response = await fetch(layer.content)
+        if (!response.ok) {
+          throw new Error(response.statusText)
+        }
+        const blob = await response.blob()
+        const zip = await JSZip.loadAsync(blob)
+        // By convention, doc.kml is the main KML file, but if it doesn't exist, just take the first KML file
+        const kmlFile = zip.file('doc.kml') ?? zip.file(/\.kml$/i)[0]
+        const kmlContent = await kmlFile?.async('string')
+        if (!kmlContent) {
+          throw new Error(t('No KML file found in KMZ archive'))
+        }
+        const dom = new DOMParser().parseFromString(kmlContent, 'text/xml')
+        geoJson = parseKmlDom(dom)
+        break
+      }
+      default:
+        throw new Error(`Unsupported overlay file type: ${layer.metadata.type}`)
+    }
+
+    if (geoJson) {
+      this.onOverlayLayerReady(L.geoJSON(geoJson as GeoJSON.GeoJsonObject), layer.description)
+    }
+  }
+
+  onOverlayLayerReady(overlayLayer: L.GeoJSON, description: string) {
+    if (this.state.map) {
       this.controls.addOverlay(overlayLayer, description)
       overlayLayer.addTo(this.state.map)
 
@@ -448,12 +462,17 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
       overlayLayer.eachLayer((l) => {
         const fprops = (l as LayerExtended).feature.properties
         const name = fprops.name || fprops.title || fprops.NAME || fprops.TITLE
+        const el = document.createElement('div')
         if (name) {
-          l.bindPopup(name)
+          el.textContent = String(name)
         } else {
-          // when no name or title, load full list of feature's properties
-          l.bindPopup('<pre>' + JSON.stringify(fprops, null, 2).replace(/[{}"]/g, '') + '</pre>')
+          const pre = document.createElement('pre')
+          pre.textContent = Object.entries(fprops)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join('\n')
+          el.appendChild(pre)
         }
+        l.bindPopup(el)
       })
     }
   }
@@ -561,6 +580,7 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     this.buildMarkers(map)
     // TODO: when heat map is selected and the user refteches data (changes question or selects a disaggregation) the
     // map will rebuild and display both markers and heat map. See DEV-1960
+    // The heat map covers the same points as the markers, copies of the world included, so it has to come second.
     this.buildHeatMap(map)
   }
 
@@ -584,6 +604,7 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
   }
 
   buildMarkers(map: L.Map) {
+    const points: PlottedPoint[] = getPlottedPoints(this.props.allData, this.state.foundSelectedQuestion)
     const prepPoints: L.Marker[] = []
     const viewby = this.props.viewby || undefined
     const colorSet = this.calcColorSet()
@@ -591,11 +612,7 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     let mapMarkers: MapValueCounts = {}
     let mM: MarkerMap = []
     const submissions: DataResponse[] = this.props.allData
-    let pointCount = 0
-    let minLat = Number.POSITIVE_INFINITY
-    let maxLat = Number.NEGATIVE_INFINITY
-    let minLng = Number.POSITIVE_INFINITY
-    let maxLng = Number.NEGATIVE_INFINITY
+    const bounds = getPointsBounds(points)
 
     if (viewby) {
       mapMarkers = this.prepFilteredMarkers(submissions, this.props.viewby)
@@ -645,62 +662,54 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
       this.setState({ markerMap: undefined })
     }
 
-    submissions.forEach((item) => {
+    points.forEach((point) => {
+      const item = point.submission
       let markerProps = {}
 
-      const parsedCoordinates: number[] = parseLatLng(item, this.state.foundSelectedQuestion)
+      if (viewby && mM) {
+        const vb = this.nameOfFieldInGroup(viewby)
+        const itemId = String(item[vb])
+        let index: number | IconNoValue = mM.findIndex((m) => m.value === itemId)
 
-      if (!!parsedCoordinates.length) {
-        pointCount += 1
-        minLat = Math.min(minLat, parsedCoordinates[0])
-        maxLat = Math.max(maxLat, parsedCoordinates[0])
-        minLng = Math.min(minLng, parsedCoordinates[1])
-        maxLng = Math.max(maxLng, parsedCoordinates[1])
-
-        if (viewby && mM) {
-          const vb = this.nameOfFieldInGroup(viewby)
-          const itemId = String(item[vb])
-          let index: number | IconNoValue = mM.findIndex((m) => m.value === itemId)
-
-          // spread indexes to use full colorset gamut if necessary
-          if (colorSet !== undefined && colorSet !== 'a') {
-            index = this.calculateIconIndex(index, mM)
-          }
-
-          // Previously it was possible that `'-novalue' + 1` would happen resulting in code not knowing what to do.
-          // I've changed it to default to 1 in case `index` is not a number.
-          let iconNumber = 1
-          if (typeof index === 'number') {
-            iconNumber = index + 1
-          }
-
-          markerProps = {
-            icon: this.buildIcon(iconNumber),
-            sId: item._id,
-            typeId: mapMarkers[itemId].id,
-          }
-        } else {
-          markerProps = {
-            icon: this.buildIcon(),
-            sId: item._id,
-            typeId: null,
-          }
+        // spread indexes to use full colorset gamut if necessary
+        if (colorSet !== undefined && colorSet !== 'a') {
+          index = this.calculateIconIndex(index, mM)
         }
 
-        prepPoints.push(L.marker([parsedCoordinates[0], parsedCoordinates[1]], markerProps))
+        // Previously it was possible that `'-novalue' + 1` would happen resulting in code not knowing what to do.
+        // I've changed it to default to 1 in case `index` is not a number.
+        let iconNumber = 1
+        if (typeof index === 'number') {
+          iconNumber = index + 1
+        }
+
+        markerProps = {
+          icon: this.buildIcon(iconNumber),
+          sId: item._id,
+          typeId: mapMarkers[itemId].id,
+        }
+      } else {
+        markerProps = {
+          icon: this.buildIcon(),
+          sId: item._id,
+          typeId: null,
+        }
       }
+
+      prepPoints.push(L.marker([point.lat, point.lng], markerProps))
     })
 
-    const nextBoundsSignature =
-      pointCount === 0
-        ? 'empty'
-        : `${pointCount}:${minLat.toFixed(6)}:${maxLat.toFixed(6)}:${minLng.toFixed(6)}:${maxLng.toFixed(6)}`
+    const nextBoundsSignature = bounds
+      ? `${points.length}:${bounds.south.toFixed(6)}:${bounds.north.toFixed(6)}:${bounds.west.toFixed(6)}:${bounds.east.toFixed(6)}`
+      : 'empty'
     const boundsChanged = this.lastRenderedBoundsSignature !== nextBoundsSignature
     this.lastRenderedBoundsSignature = nextBoundsSignature
 
     if (prepPoints.length >= 0) {
       let markers
       if (viewby) {
+        // Disaggregated markers are never clustered: the legend colours stand for the answers, and a cluster would hide
+        // them behind a count. This is also why the legend filter never has to deal with clustered markers.
         markers = L.featureGroup(prepPoints)
       } else {
         markers = L.markerClusterGroup({
@@ -732,14 +741,7 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
 
       markers.on('click', this.launchSubmissionModal.bind(this)).addTo(map)
 
-      if (prepPoints.length === 0) {
-        if (boundsChanged) {
-          // Legacy fallback location used when there are no plotted points.
-          // Single-point bounds around Cambridge, MA.
-          map.fitBounds([[42.373, -71.124]])
-        }
-        this.setState({ noData: true })
-      } else {
+      if (bounds) {
         // Note: this is a bit confusing. For some reason (possibly performance related), we didn't want the map to
         // reset the zoom when switching between disaggregated questions. This is the reason for the first two guards.
         // The last condition is only possible if we are coming from having no points to having points in the same page,
@@ -747,14 +749,36 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
         // Additionally, we now only auto-fit when plotted bounds actually changed between rebuilds.
         const shouldFitBounds = boundsChanged && (!viewby || !this.state.componentRefreshed || this.state.noData)
         if (shouldFitBounds) {
-          map.fitBounds(markers.getBounds())
+          // Fitting the plotted points rather than `markers.getBounds()`, as the latter grows with the copies of the
+          // world we are about to add to the group.
+          map.fitBounds(L.latLngBounds([bounds.south, bounds.west], [bounds.north, bounds.east]), {
+            padding: FIT_BOUNDS_PADDING,
+          })
         }
         this.setState({ noData: false })
+      } else {
+        if (boundsChanged) {
+          // Legacy fallback location used when there are no plotted points.
+          // Single-point bounds around Cambridge, MA.
+          map.fitBounds([[42.373, -71.124]])
+        }
+        this.setState({ noData: true })
       }
 
-      this.setState({
-        markers: markers as FeatureGroupExtended,
+      const group = markers as FeatureGroupExtended
+
+      // Only now that the view has been fitted do we know which copies of the world are in sight. The copies of the
+      // previous group went away with it, so this instance starts from scratch.
+      this.worldCopies?.destroy()
+      this.worldCopies = new WorldCopies(map, group, prepPoints, (drawnPoints) => {
+        this.state.heatmap?.setLatLngs(drawnPoints)
+        // A fresh copy comes with fresh icons, which know nothing about the legend filter
+        this.reapplyMarkerFilter(group)
       })
+      // Same for this whole group: a rebuild (new submissions came in, say) keeps the filter the legend is showing
+      this.reapplyMarkerFilter(group)
+
+      this.setState({ markers: group })
     } else {
       this.setState({ error: t('Error: could not load data.') })
     }
@@ -816,15 +840,8 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
   }
 
   buildHeatMap(map: L.Map) {
-    const heatmapPoints: Array<[number, number, number]> = []
-    const submissions: DataResponse[] = this.props.allData
-    submissions.forEach((item) => {
-      const parsedCoordinates: number[] = parseLatLng(item, this.state.foundSelectedQuestion)
-      if (!!parsedCoordinates.length) {
-        heatmapPoints.push([parsedCoordinates[0], parsedCoordinates[1], 1])
-      }
-    })
-    const heatmap = L.heatLayer(heatmapPoints, {
+    // Same points the markers were built from, the copies of the world included
+    const heatmap = L.heatLayer(this.worldCopies?.getDrawnPoints() ?? [], {
       minOpacity: 0.25,
       radius: 20,
       blur: 8,
@@ -839,6 +856,8 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
   showMarkers() {
     if (this.state.map && this.state.markers) {
       this.state.map.addLayer(this.state.markers)
+      // Leaving the map threw the icons away, and the ones Leaflet just built are missing the legend filter
+      this.reapplyMarkerFilter(this.state.markers)
     }
     if (this.state.map && this.state.heatmap) {
       this.state.map.removeLayer(this.state.heatmap)
@@ -1006,7 +1025,6 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     const id = String(markerId)
     const markers = this.state.markers
     let filteredByMarker = this.state.filteredByMarker
-    const unselectedClass = 'unselected'
 
     if (!filteredByMarker) {
       filteredByMarker = [id]
@@ -1017,11 +1035,36 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     }
 
     this.setState({ filteredByMarker: filteredByMarker })
-    markers?.eachLayer((layer) => {
+    if (markers) {
+      this.hideUnselectedMarkers(markers, filteredByMarker)
+    }
+  }
+
+  /**
+   * Puts the legend filter back on a group of markers that has just been given icons. Marker icons live only as long as
+   * the marker is on the map, and they come back without the class that hides them, while the legend goes on showing the
+   * filter as on. Does nothing when no filter is on, since then there is nothing to hide.
+   */
+  private reapplyMarkerFilter(markers: FeatureGroupExtended) {
+    if (this.state.filteredByMarker) {
+      this.hideUnselectedMarkers(markers, this.state.filteredByMarker)
+    }
+  }
+
+  /**
+   * Based on filter selected by user. Hides markers on the map, dims the filter row in Legend menu.
+   */
+  private hideUnselectedMarkers(markers: FeatureGroupExtended, filteredByMarker: string[]) {
+    markers.eachLayer((layer) => {
+      // A marker only has an icon while its group is on the map, and the group is off it whenever the heat map is
+      // showing. `showMarkers()` puts the filter back on the icons Leaflet builds on the way in.
+      if (!layer._icon) {
+        return
+      }
       if (filteredByMarker.includes(layer.options.typeId.toString())) {
-        layer._icon.classList.remove(unselectedClass)
+        layer._icon.classList.remove(UNSELECTED_MARKER_CLASS)
       } else {
-        layer._icon.classList.add(unselectedClass)
+        layer._icon.classList.add(UNSELECTED_MARKER_CLASS)
       }
     })
   }
@@ -1030,7 +1073,7 @@ class FormMap extends React.Component<FormMapProps, FormMapState> {
     const markers = this.state.markers
     this.setState({ filteredByMarker: undefined })
     markers?.eachLayer((layer) => {
-      layer._icon.classList.remove('unselected')
+      layer._icon?.classList.remove(UNSELECTED_MARKER_CLASS)
     })
   }
 

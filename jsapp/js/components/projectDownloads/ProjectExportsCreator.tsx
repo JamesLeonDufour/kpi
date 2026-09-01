@@ -1,16 +1,22 @@
-import React, { useEffect, useRef, useState } from 'react'
-
-import alertify from 'alertifyjs'
+import { Loader, Switch } from '@mantine/core'
+import * as Sentry from '@sentry/react'
+import { IconTrashFilled } from '@tabler/icons-react'
 import cx from 'classnames'
-import Select from 'react-select'
-import { actions } from '#/actions'
+import React, { useEffect, useRef, useState } from 'react'
+import { type OrvalFetchError, getApiErrorMessage } from '#/api/onErrorDefaultHandler'
+import {
+  useAssetsExportSettingsCreate,
+  useAssetsExportSettingsList,
+  useAssetsExportSettingsPartialUpdate,
+  useAssetsExportsCreate,
+} from '#/api/react-query/survey-data'
 import { getFlatQuestionsList, getSurveyFlatPaths, injectSupplementalRowsIntoListOfRows } from '#/assetUtils'
 import bem from '#/bem'
+import Select from '#/components/common/Select'
+import TextInput from '#/components/common/TextInput'
 import Button from '#/components/common/button'
 import Checkbox from '#/components/common/checkbox'
 import MultiCheckbox, { type MultiCheckboxItem } from '#/components/common/multiCheckbox'
-import TextBox from '#/components/common/textBox'
-import ToggleSwitch from '#/components/common/toggleSwitch'
 import { PERMISSIONS_CODENAMES } from '#/components/permissions/permConstants'
 import { userCan } from '#/components/permissions/utils'
 import ExportTypeSelector from '#/components/projectDownloads/ExportTypeSelector'
@@ -22,21 +28,25 @@ import {
   type ExportMultiOption,
   type ExportTypeDefinition,
 } from '#/components/projectDownloads/exportsConstants'
-import exportsStore from '#/components/projectDownloads/exportsStore'
 import {
   type ExportFormatOption,
   getContextualDefaultExportFormat,
   getExportFormatOptions,
+  preserveApiOnlySettings,
 } from '#/components/projectDownloads/exportsUtils'
-import { getColumnLabel } from '#/components/submissions/tableUtils'
+import { openDeleteExportSettingModal } from '#/components/projectDownloads/openDeleteExportSettingModal'
+import { getColumnLabel, orderColumns } from '#/components/submissions/tableUtils'
 import { ADDITIONAL_SUBMISSION_PROPS, SUPPLEMENTAL_DETAILS_PROP } from '#/constants'
-import type { AssetResponse, ExportSetting, ExportSettingRequest, MongoQuery, PaginatedResponse } from '#/dataInterface'
-import { createDateQuery, formatTimeDate, recordEntries, recordKeys, recordValues } from '#/utils'
+import type { AssetResponse, ExportSetting, ExportSettingRequest, MongoQuery } from '#/dataInterface'
+import { createDateQuery, formatTimeDate, notify, recordKeys, recordValues } from '#/utils'
+import ActionIcon from '../common/ActionIcon'
 
 const NAMELESS_EXPORT_NAME = t('Latest unsaved settings')
 
 interface ProjectExportsCreatorProps {
   asset: AssetResponse
+  selectedExportType: ExportTypeDefinition
+  setSelectedExportType: (newType: ExportTypeDefinition) => void
 }
 
 interface ProjectExportsCreatorState {
@@ -66,9 +76,10 @@ interface ProjectExportsCreatorState {
 }
 
 interface DefinedExportOption {
-  value: number | null
+  /** The export setting's `uid`. */
+  value: string
   label: string
-  data?: ExportSetting
+  data: ExportSetting
 }
 
 /**
@@ -79,6 +90,14 @@ interface DefinedExportOption {
  * weren't saved as named custom setting.
  */
 export default function ProjectExportsCreator(props: ProjectExportsCreatorProps) {
+  const exportSettingsQuery = useAssetsExportSettingsList(props.asset.uid)
+  const createExportMutation = useAssetsExportsCreate()
+  const createExportSettingMutation = useAssetsExportSettingsCreate()
+  const updateExportSettingMutation = useAssetsExportSettingsPartialUpdate()
+  // This guard lets us auto-apply the latest saved settings once, without
+  // overriding user edits on every background refetch.
+  const shouldPreselectLastSettingsRef = useRef(true)
+
   function getAllSelectableRows() {
     let allRows: Set<string> = new Set()
     if (props.asset?.content?.survey) {
@@ -93,14 +112,18 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
 
     allRows = new Set(injectSupplementalRowsIntoListOfRows(props.asset, allRows))
 
-    return allRows
+    // Order these the same way as Data Table does (see `orderColumns`), so that
+    // users pick fields from a familiar looking list. Note that the list itself
+    // is wider than Data Table's on purpose - some props are worth exporting
+    // even though we never show them as columns.
+    return new Set(orderColumns(props.asset, Array.from(allRows)))
   }
 
   function getInitialState(): ProjectExportsCreatorState {
     const newState: ProjectExportsCreatorState = {
       isComponentReady: false,
       isPending: false,
-      selectedExportType: exportsStore.getExportType(),
+      selectedExportType: props.selectedExportType,
       selectedExportFormat: getContextualDefaultExportFormat(props.asset),
       groupSeparator: DEFAULT_EXPORT_SETTINGS.GROUP_SEPARATOR,
       selectedExportMultiple: DEFAULT_EXPORT_SETTINGS.EXPORT_MULTIPLE,
@@ -133,8 +156,9 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
   }
 
   const [state, setState] = useState<ProjectExportsCreatorState>(() => getInitialState())
+  // Async callbacks (submit/polling/dialog actions) can run after React state
+  // updates. Keep a ref in sync so those callbacks always read current values.
   const stateRef = useRef(state)
-  const clearScheduledExportRef = useRef<Function | undefined>(undefined)
 
   function mergeState(newState: Partial<ProjectExportsCreatorState>) {
     setState((currentState) => {
@@ -153,8 +177,9 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
   }
 
   function setDefaultExportSettings() {
-    exportsStore.setExportType(DEFAULT_EXPORT_SETTINGS.EXPORT_TYPE)
+    props.setSelectedExportType(DEFAULT_EXPORT_SETTINGS.EXPORT_TYPE)
     mergeState({
+      selectedExportType: DEFAULT_EXPORT_SETTINGS.EXPORT_TYPE,
       selectedExportFormat: getContextualDefaultExportFormat(props.asset),
       groupSeparator: DEFAULT_EXPORT_SETTINGS.GROUP_SEPARATOR,
       selectedExportMultiple: DEFAULT_EXPORT_SETTINGS.EXPORT_MULTIPLE,
@@ -170,27 +195,17 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     })
   }
 
-  function onExportsStoreChange() {
-    const newExportType = exportsStore.getExportType()
-    if (newExportType.value !== stateRef.current.selectedExportType.value) {
-      mergeState({
-        selectedExportType: newExportType,
-        isSaveCustomExportEnabled: false,
-        customExportName: '',
-      })
-    }
-  }
-
-  function onCreateExportCompleted() {
-    mergeState({ isPending: false })
-  }
-
-  function onCreateExportFailed() {
-    mergeState({ isPending: false })
-  }
-
   function applyExportSettingToState(data: ExportSetting) {
-    exportsStore.setExportType(EXPORT_TYPES[data.export_settings.type], false)
+    const exportTypeName = data.export_settings.type
+
+    const exportType = EXPORT_TYPES[exportTypeName]
+
+    // If the saved export type is still invalid after remapping, fall back to default
+    if (!exportType) {
+      console.warn(`Invalid export type "${data.export_settings.type}" in saved settings, using default settings`)
+      setDefaultExportSettings()
+      return
+    }
 
     const exportFormatOptions = getExportFormatOptions(props.asset)
     let selectedExportFormat = exportFormatOptions.find((option) => option.value === data.export_settings.lang)
@@ -207,7 +222,7 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     const newSelectedRows = new Set(data.export_settings.fields)
 
     const newStateObj: Partial<ProjectExportsCreatorState> = {
-      selectedExportType: EXPORT_TYPES[data.export_settings.type],
+      selectedExportType: exportType,
       selectedExportFormat,
       groupSeparator: data.export_settings.group_sep,
       selectedExportMultiple: EXPORT_MULTIPLE_OPTIONS[data.export_settings.multiple_select],
@@ -216,9 +231,11 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
       isSaveCustomExportEnabled: typeof data.name === 'string' && data.name.length >= 1,
       customExportName: data.name,
       isCustomSelectionEnabled: customSelectionEnabled,
-      isFlattenGeoJsonEnabled: data.export_settings.flatten,
-      isXlsTypesAsTextEnabled: data.export_settings.xls_types_as_text,
-      isIncludeMediaUrlEnabled: data.export_settings.include_media_url,
+      // Only some export types store these, so a setting saved for another type
+      // leaves them undefined - use the defaults instead.
+      isFlattenGeoJsonEnabled: data.export_settings.flatten ?? DEFAULT_EXPORT_SETTINGS.FLATTEN_GEO_JSON,
+      isXlsTypesAsTextEnabled: data.export_settings.xls_types_as_text ?? DEFAULT_EXPORT_SETTINGS.XLS_TYPES_AS_TEXT,
+      isIncludeMediaUrlEnabled: data.export_settings.include_media_url ?? DEFAULT_EXPORT_SETTINGS.INCLUDE_MEDIA_URL,
       selectedRows: newSelectedRows,
     }
 
@@ -227,84 +244,48 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     }
 
     stateRef.current.definedExports.forEach((definedExport) => {
-      if (definedExport.data?.name === data.name) {
+      if (definedExport.data.name === data.name) {
         newStateObj.selectedDefinedExport = definedExport
       }
     })
 
-    if (newStateObj.selectedExportType) {
-      exportsStore.setExportType(newStateObj.selectedExportType)
-    }
+    props.setSelectedExportType(exportType)
 
     mergeState(newStateObj)
   }
 
-  function onGetExportSettingsCompleted(
-    response: PaginatedResponse<ExportSetting>,
-    passData?: { preselectLastSettings?: boolean },
-  ) {
-    const definedExports: DefinedExportOption[] = []
-    response.results.forEach((result, index) => {
-      definedExports.push({
-        value: index,
-        label: result.name ? result.name : NAMELESS_EXPORT_NAME,
-        data: result,
+  async function createExportWithSettings(response: ExportSettingRequest) {
+    try {
+      await createExportMutation.mutateAsync({
+        uidAsset: props.asset.uid,
+        data: response.export_settings as never,
       })
-    })
-
-    mergeState({
-      isUpdatingDefinedExportsList: false,
-      definedExports,
-    })
-
-    if (response.count >= 1 && passData?.preselectLastSettings) {
-      applyExportSettingToState(response.results[0])
-    }
-
-    if (!stateRef.current.isComponentReady) {
-      mergeState({ isComponentReady: true })
+    } catch (error: unknown) {
+      const errorMessage = getApiErrorMessage(error as OrvalFetchError) || t('Failed to create export')
+      notify(errorMessage, 'error')
+      Sentry.captureMessage(errorMessage)
+      throw new Error(errorMessage)
     }
   }
 
-  function onDeleteExportSettingCompleted() {
-    clearSelectedDefinedExport()
-    fetchExportSettings()
-  }
-
-  function handleScheduledExport(response: ExportSettingRequest) {
-    if (typeof clearScheduledExportRef.current === 'function') {
-      clearScheduledExportRef.current()
-    }
-
-    mergeState({ isPending: true })
-
-    const exportParams = response.export_settings
-    actions.exports.createExport(props.asset.uid, exportParams)
-  }
-
-  function fetchExportSettings(preselectLastSettings = false) {
+  async function fetchExportSettings(preselectLastSettings = false) {
+    shouldPreselectLastSettingsRef.current = preselectLastSettings
     mergeState({ isUpdatingDefinedExportsList: true })
-    actions.exports.getExportSettings(props.asset.uid, { preselectLastSettings })
+    await exportSettingsQuery.refetch()
   }
 
-  function safeDeleteExportSetting(exportSettingUid: string) {
-    const dialog = alertify.dialog('confirm')
-    const opts = {
-      title: t('Delete export settings?'),
-      message: t('Are you sure you want to delete this settings? This action is not reversible.'),
-      labels: { ok: t('Delete'), cancel: t('Cancel') },
-      onok: () => {
-        actions.exports.deleteExportSetting(props.asset.uid, exportSettingUid)
-      },
-      oncancel: () => {
-        dialog.destroy()
-      },
-    }
-    dialog.set(opts).show()
+  function safeDeleteExportSetting(exportSettingUid: string, exportSettingName: string) {
+    openDeleteExportSettingModal(props.asset.uid, exportSettingUid, exportSettingName, async () => {
+      clearSelectedDefinedExport()
+      await fetchExportSettings()
+    })
   }
 
-  function onSelectedDefinedExportChange(newDefinedExport: DefinedExportOption | null) {
-    if (newDefinedExport === null || newDefinedExport.value === null || newDefinedExport.data === undefined) {
+  function onSelectedDefinedExportChange(newValue: string | null) {
+    const newDefinedExport = state.definedExports.find((definedExport) => definedExport.value === newValue)
+
+    // Nothing found means the "None" option was picked, so back to defaults.
+    if (newDefinedExport === undefined) {
       setDefaultExportSettings()
       clearSelectedDefinedExport()
     } else {
@@ -312,13 +293,13 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     }
   }
 
-  function getSelectedDefinedExportOptions(): DefinedExportOption[] {
+  function getSelectedDefinedExportOptions() {
     return [
       {
-        value: null,
+        value: '',
         label: t('None'),
       },
-      ...state.definedExports,
+      ...state.definedExports.map(({ value, label }) => ({ value, label })),
     ]
   }
 
@@ -358,7 +339,7 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     return `Export ${formatTimeDate(new Date().toString())}`
   }
 
-  function onSubmit(evt: React.FormEvent) {
+  async function onSubmit(evt: React.FormEvent) {
     evt.preventDefault()
 
     const currentState = stateRef.current
@@ -386,7 +367,8 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
 
     if (
       currentState.selectedExportType.value === EXPORT_TYPES.xls.value ||
-      currentState.selectedExportType.value === EXPORT_TYPES.csv.value
+      currentState.selectedExportType.value === EXPORT_TYPES.csv.value ||
+      currentState.selectedExportType.value === EXPORT_TYPES.geojson.value
     ) {
       payload.export_settings.include_media_url = currentState.isIncludeMediaUrlEnabled
     }
@@ -400,31 +382,55 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     }
 
     const foundDefinedExport = currentState.definedExports.find(
-      (definedExport) => definedExport.data?.name === payload.name,
+      (definedExport) => definedExport.data.name === payload.name,
     )
 
-    if (foundDefinedExport?.data) {
-      recordEntries(foundDefinedExport.data.export_settings).forEach(([key, value]) => {
-        if (!Object.prototype.hasOwnProperty.call(payload.export_settings, key)) {
-          payload.export_settings[key] = value as never
-        }
-      })
+    // We are about to overwrite that saved setting with this payload, so first
+    // take over the options it holds that this form has no field for.
+    if (foundDefinedExport) {
+      payload.export_settings = preserveApiOnlySettings(
+        payload.export_settings,
+        foundDefinedExport.data.export_settings,
+      )
     }
 
     mergeState({ isPending: true })
 
-    if (typeof clearScheduledExportRef.current === 'function') {
-      clearScheduledExportRef.current()
-    }
+    try {
+      if (currentState.selectedDefinedExport !== null || !userCan(PERMISSIONS_CODENAMES.manage_asset, props.asset)) {
+        await createExportWithSettings(payload)
+      } else if (foundDefinedExport?.data.uid) {
+        try {
+          await updateExportSettingMutation.mutateAsync({
+            uidAsset: props.asset.uid,
+            uidExportSetting: foundDefinedExport.data.uid,
+            data: payload as never,
+          })
+        } catch {
+          notify(t('Failed to update export setting'), 'error')
+          throw new Error('update export setting failed')
+        }
 
-    if (currentState.selectedDefinedExport !== null || !userCan(PERMISSIONS_CODENAMES.manage_asset, props.asset)) {
-      handleScheduledExport(payload)
-    } else if (foundDefinedExport) {
-      clearScheduledExportRef.current = actions.exports.updateExportSetting.completed.listen(handleScheduledExport)
-      actions.exports.updateExportSetting(props.asset.uid, foundDefinedExport.data?.uid, payload)
-    } else {
-      clearScheduledExportRef.current = actions.exports.createExportSetting.completed.listen(handleScheduledExport)
-      actions.exports.createExportSetting(props.asset.uid, payload)
+        await fetchExportSettings(true)
+        await createExportWithSettings(payload)
+      } else {
+        try {
+          await createExportSettingMutation.mutateAsync({
+            uidAsset: props.asset.uid,
+            data: payload as never,
+          })
+        } catch {
+          notify(t('Failed to create export setting'), 'error')
+          throw new Error('create export setting failed')
+        }
+
+        await fetchExportSettings(true)
+        await createExportWithSettings(payload)
+      }
+    } catch {
+      // Error notifications are handled at mutation call sites.
+    } finally {
+      mergeState({ isPending: false })
     }
   }
 
@@ -515,19 +521,16 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
             </bem.ProjectDownloads__title>
 
             <Select
-              value={state.selectedExportMultiple}
-              options={exportMultipleOptions}
+              value={state.selectedExportMultiple.value}
+              data={exportMultipleOptions.map(({ value, label }) => ({ value, label }))}
               onChange={(newValue) => {
                 if (newValue !== null) {
                   clearSelectedDefinedExport()
-                  mergeState({ selectedExportMultiple: newValue })
+                  mergeState({ selectedExportMultiple: EXPORT_MULTIPLE_OPTIONS[newValue] })
                 }
               }}
-              className='kobo-select'
-              classNamePrefix='kobo-select'
-              menuPlacement='auto'
-              placeholder={t('Select…')}
-              isSearchable={false}
+              searchable={false}
+              clearable={false}
             />
           </label>
 
@@ -561,13 +564,14 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
                 {t('Group separator')}
               </span>
 
-              <TextBox
+              <TextInput
                 disabled={!state.isIncludeGroupsEnabled}
                 value={state.groupSeparator}
-                onChange={(newValue) => {
+                onChange={(evt) => {
                   clearSelectedDefinedExport()
-                  mergeState({ groupSeparator: newValue })
+                  mergeState({ groupSeparator: evt.currentTarget.value })
                 }}
+                size='sm'
               />
             </div>
           </bem.ProjectDownloads__columnRow>
@@ -599,7 +603,8 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
           )}
 
           {(state.selectedExportType.value === EXPORT_TYPES.xls.value ||
-            state.selectedExportType.value === EXPORT_TYPES.csv.value) && (
+            state.selectedExportType.value === EXPORT_TYPES.csv.value ||
+            state.selectedExportType.value === EXPORT_TYPES.geojson.value) && (
             <bem.ProjectDownloads__columnRow>
               <Checkbox
                 checked={state.isIncludeMediaUrlEnabled}
@@ -622,15 +627,16 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
               label={t('Save selection as…')}
             />
 
-            <TextBox
+            <TextInput
               disabled={!state.isSaveCustomExportEnabled}
               value={state.customExportName}
-              onChange={(newValue) => {
+              onChange={(evt) => {
                 clearSelectedDefinedExport()
-                mergeState({ customExportName: newValue })
+                mergeState({ customExportName: evt.currentTarget.value })
               }}
               placeholder={t('Name your export settings')}
               className='custom-export-name-textbox'
+              size='sm'
             />
           </bem.ProjectDownloads__columnRow>
 
@@ -673,11 +679,11 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
 
         <bem.ProjectDownloads__column m='right'>
           <bem.ProjectDownloads__columnRow m='rows-selector-header'>
-            <ToggleSwitch
+            <Switch
               checked={state.isCustomSelectionEnabled}
-              onChange={(newValue) => {
+              onChange={(event) => {
                 clearSelectedDefinedExport()
-                mergeState({ isCustomSelectionEnabled: newValue })
+                mergeState({ isCustomSelectionEnabled: event.currentTarget.checked })
               }}
               label={t('Select questions to be exported')}
             />
@@ -710,28 +716,60 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
   }
 
   useEffect(() => {
-    const unlisteners = [
-      exportsStore.listen(onExportsStoreChange, null),
-      actions.exports.createExport.completed.listen(onCreateExportCompleted),
-      actions.exports.createExport.failed.listen(onCreateExportFailed),
-      actions.exports.getExportSettings.completed.listen(onGetExportSettingsCompleted),
-      actions.exports.updateExportSetting.completed.listen(() => fetchExportSettings(true)),
-      actions.exports.createExportSetting.completed.listen(() => fetchExportSettings(true)),
-      actions.exports.deleteExportSetting.completed.listen(onDeleteExportSettingCompleted),
-    ]
-
-    fetchExportSettings(true)
-
-    return () => {
-      unlisteners.forEach((unlisten) => {
-        unlisten()
+    if (props.selectedExportType.value !== stateRef.current.selectedExportType.value) {
+      mergeState({
+        selectedExportType: props.selectedExportType,
+        isSaveCustomExportEnabled: false,
+        customExportName: '',
       })
-
-      if (typeof clearScheduledExportRef.current === 'function') {
-        clearScheduledExportRef.current()
-      }
     }
-  }, [props.asset.uid])
+  }, [props.selectedExportType])
+
+  useEffect(() => {
+    if (exportSettingsQuery.isFetching) {
+      mergeState({ isUpdatingDefinedExportsList: true })
+    }
+  }, [exportSettingsQuery.isFetching])
+
+  useEffect(() => {
+    if (!exportSettingsQuery.isSuccess || exportSettingsQuery.data.status !== 200) {
+      return
+    }
+
+    const response = exportSettingsQuery.data.data
+    const definedExports: DefinedExportOption[] = []
+    response.results.forEach((result) => {
+      definedExports.push({
+        value: result.uid,
+        label: result.name ? result.name : NAMELESS_EXPORT_NAME,
+        data: result as never,
+      })
+    })
+
+    mergeState({
+      isUpdatingDefinedExportsList: false,
+      definedExports,
+    })
+
+    if (response.count >= 1 && shouldPreselectLastSettingsRef.current) {
+      applyExportSettingToState(response.results[0] as never)
+    }
+
+    shouldPreselectLastSettingsRef.current = false
+
+    if (!stateRef.current.isComponentReady) {
+      mergeState({ isComponentReady: true })
+    }
+  }, [exportSettingsQuery.data, exportSettingsQuery.isSuccess])
+
+  useEffect(() => {
+    if (exportSettingsQuery.isError) {
+      mergeState({
+        isUpdatingDefinedExportsList: false,
+        isComponentReady: true,
+      })
+    }
+  }, [exportSettingsQuery.isError])
 
   const formClassNames = ['project-downloads__exports-creator']
   if (!state.isComponentReady) {
@@ -744,24 +782,26 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
     <bem.FormView__cell m={['box', 'padding']}>
       <bem.FormView__form className={formClassNames.join(' ')}>
         <bem.ProjectDownloads__selectorRow>
-          <ExportTypeSelector />
+          <ExportTypeSelector
+            selectedExportType={props.selectedExportType}
+            onSelectedExportTypeChange={props.setSelectedExportType}
+          />
 
           <label>
             <bem.ProjectDownloads__title>{t('Value and header format')}</bem.ProjectDownloads__title>
 
             <Select
-              value={state.selectedExportFormat}
-              options={exportFormatOptions}
+              value={state.selectedExportFormat.value}
+              data={exportFormatOptions.map(({ value, label }) => ({ value, label }))}
               onChange={(newValue) => {
-                if (newValue !== null) {
+                const newFormat = exportFormatOptions.find((option) => option.value === newValue)
+                if (newFormat !== undefined) {
                   clearSelectedDefinedExport()
-                  mergeState({ selectedExportFormat: newValue })
+                  mergeState({ selectedExportFormat: newFormat })
                 }
               }}
-              className='kobo-select'
-              classNamePrefix='kobo-select'
-              menuPlacement='auto'
-              isSearchable={false}
+              searchable={false}
+              clearable={false}
             />
           </label>
         </bem.ProjectDownloads__selectorRow>
@@ -787,28 +827,26 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
                   <bem.ProjectDownloads__title>{t('Apply saved export settings')}</bem.ProjectDownloads__title>
 
                   <Select
-                    isLoading={state.isUpdatingDefinedExportsList}
-                    value={state.selectedDefinedExport}
-                    options={getSelectedDefinedExportOptions()}
+                    rightSection={state.isUpdatingDefinedExportsList ? <Loader size='xs' /> : undefined}
+                    value={state.selectedDefinedExport?.value ?? ''}
+                    data={getSelectedDefinedExportOptions()}
                     onChange={onSelectedDefinedExportChange}
-                    className='kobo-select'
-                    classNamePrefix='kobo-select'
-                    menuPlacement='auto'
                     placeholder={t('No export settings selected')}
+                    clearable={false}
                   />
                 </label>
 
                 {state.selectedDefinedExport && userCan(PERMISSIONS_CODENAMES.manage_asset, props.asset) && (
-                  <Button
-                    type='secondary-danger'
-                    size='m'
-                    onClick={(evt: React.TouchEvent) => {
+                  <ActionIcon
+                    variant='danger'
+                    size='lg'
+                    onClick={(evt: React.MouseEvent<HTMLButtonElement>) => {
                       evt.preventDefault()
-                      if (state.selectedDefinedExport?.data?.uid) {
-                        safeDeleteExportSetting(state.selectedDefinedExport.data.uid)
+                      if (state.selectedDefinedExport?.data.uid) {
+                        safeDeleteExportSetting(state.selectedDefinedExport.data.uid, state.selectedDefinedExport.label)
                       }
                     }}
-                    startIcon='trash'
+                    icon={IconTrashFilled}
                     className='project-downloads__delete-settings-button'
                   />
                 )}
@@ -821,7 +859,8 @@ export default function ProjectExportsCreator(props: ProjectExportsCreatorProps)
             size='l'
             isSubmit
             onClick={onSubmit}
-            isDisabled={(state.isCustomSelectionEnabled && state.selectedRows.size === 0) || state.isPending}
+            isDisabled={state.isCustomSelectionEnabled && state.selectedRows.size === 0}
+            isPending={state.isPending}
             label={t('Export')}
           />
         </bem.ProjectDownloads__submitRow>
