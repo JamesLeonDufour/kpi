@@ -30,6 +30,7 @@ from kpi.constants import PERM_CHANGE_ASSET
 from kpi.deployment_backends.kc_access.storage import (
     default_kobocat_storage as default_storage,
 )
+from kobo.apps.kobo_cases.views import OpenRosaCaseLinkViewset
 from kpi.views.v2.paired_data import OpenRosaDynamicDataAttachmentViewset
 
 DECIMAL_PRECISION = 2
@@ -175,11 +176,18 @@ def get_media_file_response(
     args = resolver_match.args
     kwargs = resolver_match.kwargs
 
-    paired_data_viewset = OpenRosaDynamicDataAttachmentViewset.as_view(
-        {'get': 'external'}
-    )
+    # `paired_data` metadata covers two different features that both serve a
+    # live file through KPI: Dynamic Data Attachments and case-management case
+    # links. Pick the viewset the URL actually resolved to — they take
+    # different lookup kwargs, so calling the wrong one always 404s.
+    if resolver_match.url_name == 'case-link-external':
+        viewset_class = OpenRosaCaseLinkViewset
+    else:
+        viewset_class = OpenRosaDynamicDataAttachmentViewset
+
+    external_viewset = viewset_class.as_view({'get': 'external'})
     django_http_request = request._request
-    return paired_data_viewset(request=django_http_request, *args, **kwargs)
+    return external_viewset(request=django_http_request, *args, **kwargs)
 
 
 def get_view_name(view_obj):

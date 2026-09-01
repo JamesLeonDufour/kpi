@@ -1,0 +1,4 @@
+case_id,name,status,last_visit
+CASE001,Amina Diallo,open,2026-08-01
+CASE002,Jean Kouassi,in_progress,2026-08-10
+CASE003,Fatou Sow,closed,2026-07-15

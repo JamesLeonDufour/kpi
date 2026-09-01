@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework_extensions.mixins import NestedViewSetMixin
 
 from kpi.permissions import AssetEditorPermission, XMLExternalDataPermission
+from kpi.renderers import SubmissionCSVRenderer
 from kpi.utils.viewset_mixins import AssetNestedObjectViewsetMixin
 
 from .models import CaseEvent, CaseLink, CaseRecord, CaseTable, log_case_event
@@ -287,6 +288,7 @@ class CaseLinkViewSet(
         detail=True,
         methods=['GET'],
         permission_classes=[XMLExternalDataPermission],
+        renderer_classes=[SubmissionCSVRenderer],
         filter_backends=[],
     )
     def external(self, request, uid_case_link=None, **kwargs):
@@ -299,3 +301,17 @@ class CaseLinkViewSet(
             f'attachment; filename="{link.filename}"'
         )
         return response
+
+
+class OpenRosaCaseLinkViewset(CaseLinkViewSet):
+    """
+    Only specific to the OpenRosa manifest, when a project is linked to a case
+    table. Mirrors `OpenRosaDynamicDataAttachmentViewset`: KoboCAT calls
+    `.as_view()` directly (see `kobo.apps.openrosa.apps.api.tools`), which does
+    not carry the `@action` initkwargs, so the permission and renderer classes
+    have to be enforced at class level to be taken into account.
+    """
+
+    permission_classes = [XMLExternalDataPermission]
+    renderer_classes = [SubmissionCSVRenderer]
+    filter_backends = []
