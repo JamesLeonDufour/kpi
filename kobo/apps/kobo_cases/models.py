@@ -141,9 +141,11 @@ class CaseLink(models.Model, AbstractFormMedia):
     case_table = models.ForeignKey(
         CaseTable, related_name='links', on_delete=models.CASCADE
     )
-    # `filename` implements `OpenRosaManifestInterface.filename()`
-    # and `SyncBackendMediaInterface.filename()`
-    filename = models.CharField(max_length=255, default='cases.csv')
+    # Backs the `filename` property below (see its docstring for why this
+    # can't be a plain field named `filename`).
+    _filename = models.CharField(
+        max_length=255, default='cases.csv', db_column='filename'
+    )
     # Name (or full group path) of the question whose answer holds the case id
     case_id_xpath = models.CharField(max_length=255)
     # {submission question name/xpath: case table column} written on submission
@@ -156,7 +158,7 @@ class CaseLink(models.Model, AbstractFormMedia):
     date_modified = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = (('asset', 'case_table'), ('asset', 'filename'))
+        unique_together = (('asset', 'case_table'), ('asset', '_filename'))
         ordering = ['pk']
 
     def __str__(self):
@@ -191,6 +193,26 @@ class CaseLink(models.Model, AbstractFormMedia):
         Implements `SyncBackendMediaInterface.deleted_at()`
         """
         return None
+
+    @property
+    def filename(self):
+        """
+        Implements `OpenRosaManifestInterface.filename()` and
+        `SyncBackendMediaInterface.filename()`.
+
+        This must be a `@property`, not a plain field named `filename`:
+        Django's `ModelBase` adds field attributes to the class *after*
+        `ABCMeta` has already computed `__abstractmethods__` from the
+        interfaces above, so a field literally named `filename` never
+        actually satisfies the abstract method — `CaseLink` becomes
+        permanently uninstantiable (`TypeError: Can't instantiate
+        abstract class`). Backed by `_filename` instead.
+        """
+        return self._filename
+
+    @filename.setter
+    def filename(self, value):
+        self._filename = value
 
     @property
     def file_type(self):

@@ -35,6 +35,7 @@
   border: 1px solid #e6e6e6;
   border-radius: 6px;
   padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .panelTitle {
@@ -82,16 +83,21 @@
 
 .grid {
   width: 100%;
-  overflow-x: auto;
+  max-height: 65vh;
+  overflow: auto;
+  border: 1px solid #e6e6e6;
+  border-radius: 6px;
 }
 
 .gridTable {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 100%;
 
   th {
     position: sticky;
     top: 0;
+    z-index: 1;
     background-color: #38434e;
     color: #fff;
     font-size: 12px;
@@ -101,11 +107,14 @@
   }
 
   th.keyColumn {
+    left: 0;
+    z-index: 2;
     background-color: #253544;
   }
 
   td {
-    border: 1px solid #e6e6e6;
+    border-bottom: 1px solid #e6e6e6;
+    border-right: 1px solid #eef0f2;
     padding: 0;
     font-size: 13px;
     min-width: 120px;
@@ -113,9 +122,29 @@
   }
 
   td.keyColumn {
+    position: sticky;
+    left: 0;
+    z-index: 1;
     background-color: #f4f6f8;
     font-weight: 600;
     padding: 6px 12px;
+    border-right: 1px solid #e2e5e8;
+  }
+
+  tbody tr:nth-child(even) td {
+    background-color: #fafbfc;
+  }
+
+  tbody tr:nth-child(even) td.keyColumn {
+    background-color: #f0f2f4;
+  }
+
+  tbody tr:hover td {
+    background-color: #f4f9ff;
+  }
+
+  tbody tr:hover td.keyColumn {
+    background-color: #e7f2fd;
   }
 }
 
@@ -250,9 +279,92 @@
   text-align: center;
 }
 
+.gridToolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  .textInput {
+    min-width: 220px;
+    padding-left: 30px;
+  }
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: #9a9a9a;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.clearSearchButton {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: 0;
+  color: #9a9a9a;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+
+  &:hover {
+    color: #555;
+  }
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #efefef;
+}
+
+.pagerRange {
+  font-size: 12px;
+  color: #8a8a8a;
+}
+
+.pagerButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .secondaryButton {
+    padding: 5px 11px;
+  }
+}
+
+.pagerPageIndicator {
+  font-size: 12px;
+  color: #555;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
 .sidebarInfo {
   padding: 16px;
   font-size: 13px;
   color: #555;
   line-height: 1.5;
+}
+
+.sidebarInfoTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
 }

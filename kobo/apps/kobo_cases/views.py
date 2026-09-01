@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -180,7 +180,14 @@ class CaseRecordViewSet(CaseTableNestedViewsetMixin, viewsets.ModelViewSet):
     pagination_class = CaseRecordPagination
 
     def get_queryset(self):
-        return CaseRecord.objects.filter(table=self.case_table)
+        queryset = CaseRecord.objects.filter(table=self.case_table)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            query = Q(key__icontains=search)
+            for column in self.case_table.column_names:
+                query |= Q(**{f'data__{column}__icontains': search})
+            queryset = queryset.filter(query)
+        return queryset
 
     def _data_changed(self):
         table = self.case_table

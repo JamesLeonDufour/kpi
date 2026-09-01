@@ -35,6 +35,8 @@ interface EditedCell {
   column: string
 }
 
+const PAGE_SIZE = 50
+
 /**
  * Detail view of one case table: editable data grid, CSV upload and
  * project links management.
@@ -45,6 +47,10 @@ export default function CaseTableRoute() {
 
   const [table, setTable] = useState<CaseTable | null>(null)
   const [records, setRecords] = useState<CaseRecord[] | null>(null)
+  const [recordCount, setRecordCount] = useState(0)
+  const [page, setPage] = useState(0)
+  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [links, setLinks] = useState<CaseLink[]>([])
   const [surveys, setSurveys] = useState<SurveyAssetOption[]>([])
   const [editedCell, setEditedCell] = useState<EditedCell | null>(null)
@@ -66,26 +72,53 @@ export default function CaseTableRoute() {
   const [historyKey, setHistoryKey] = useState<string | null>(null)
   const [events, setEvents] = useState<CaseEvent[] | null>(null)
 
-  const loadEverything = useCallback(() => {
+  const loadTableAndLinks = useCallback(() => {
     getCaseTable(tableUid)
       .then(setTable)
-      .catch((error) => handleApiFail(error as FailResponse))
-    getCaseRecords(tableUid)
-      .then((response) => setRecords(response.results))
       .catch((error) => handleApiFail(error as FailResponse))
     getCaseTableLinks(tableUid)
       .then(setLinks)
       .catch(() => setLinks([]))
   }, [tableUid])
 
+  const loadRecords = useCallback(() => {
+    getCaseRecords(tableUid, { limit: PAGE_SIZE, offset: page * PAGE_SIZE, search }).then((response) => {
+      setRecords(response.results)
+      setRecordCount(response.count)
+    }).catch((error) => handleApiFail(error as FailResponse))
+  }, [tableUid, page, search])
+
+  /** Refreshes everything currently on screen — used after any mutation. */
+  const loadEverything = useCallback(() => {
+    loadTableAndLinks()
+    loadRecords()
+  }, [loadTableAndLinks, loadRecords])
+
+  // Debounce free-text search input before it drives a request
   useEffect(() => {
-    loadEverything()
+    const handle = setTimeout(() => {
+      setSearch(searchInput)
+      setPage(0)
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [searchInput])
+
+  useEffect(() => {
+    loadTableAndLinks()
     fetchGet<{ results: Array<{ uid: string; name: string }> }>(
       '/api/v2/assets/?q=asset_type:survey&limit=200&fields=["uid","name"]',
     )
       .then((response) => setSurveys(response.results.map((a) => ({ uid: a.uid, name: a.name }))))
       .catch(() => setSurveys([]))
-  }, [loadEverything])
+  }, [loadTableAndLinks])
+
+  useEffect(() => {
+    loadRecords()
+  }, [loadRecords])
+
+  const pageCount = Math.max(1, Math.ceil(recordCount / PAGE_SIZE))
+  const rangeStart = recordCount === 0 ? 0 : page * PAGE_SIZE + 1
+  const rangeEnd = Math.min(recordCount, (page + 1) * PAGE_SIZE)
 
   function startCellEdit(record: CaseRecord, column: string) {
     setEditedCell({ recordId: record.id, column })
@@ -117,15 +150,20 @@ export default function CaseTableRoute() {
   }
 
   function onAddRow() {
-    if (!newRowKey.trim()) {
+    const key = newRowKey.trim()
+    if (!key) {
       notify.error(t('Please provide a value for the key column'))
       return
     }
     setIsBusy(true)
-    createCaseRecord(tableUid, { key: newRowKey.trim(), data: {} })
+    createCaseRecord(tableUid, { key, data: {} })
       .then(() => {
         setNewRowKey('')
-        loadEverything()
+        // Jump straight to the new row so it's visible regardless of page
+        setSearchInput(key)
+        setSearch(key)
+        setPage(0)
+        loadTableAndLinks()
       })
       .catch((error) => handleApiFail(error as FailResponse))
       .finally(() => setIsBusy(false))
@@ -136,7 +174,14 @@ export default function CaseTableRoute() {
       return
     }
     deleteCaseRecord(tableUid, record.id)
-      .then(() => loadEverything())
+      .then(() => {
+        // Step back a page if that was the last row on this (non-first) page
+        if (records !== null && records.length === 1 && page > 0) {
+          setPage(page - 1)
+        } else {
+          loadEverything()
+        }
+      })
       .catch((error) => handleApiFail(error as FailResponse))
   }
 
@@ -302,7 +347,7 @@ export default function CaseTableRoute() {
           {' / '}
           {table.name}
           <span className={styles.badge}>
-            {t('##count## records').replace('##count##', String(records.length))}
+            {t('##count## records').replace('##count##', String(recordCount))}
           </span>
         </h1>
         <div className={styles.headerActions}>
@@ -323,22 +368,45 @@ export default function CaseTableRoute() {
       </div>
 
       <section className={styles.panel}>
-        <div className={styles.formRow}>
-          <input
-            type='text'
-            className={styles.textInput}
-            placeholder={t('New ##key##…').replace('##key##', table.key_column)}
-            value={newRowKey}
-            onChange={(evt) => setNewRowKey(evt.target.value)}
-            onKeyDown={(evt) => {
-              if (evt.key === 'Enter') {
-                onAddRow()
-              }
-            }}
-          />
-          <button type='button' className={styles.actionButton} disabled={isBusy} onClick={onAddRow}>
-            {t('Add case')}
-          </button>
+        <div className={styles.gridToolbar}>
+          <div className={styles.formRow}>
+            <input
+              type='text'
+              className={styles.textInput}
+              placeholder={t('New ##key##…').replace('##key##', table.key_column)}
+              value={newRowKey}
+              onChange={(evt) => setNewRowKey(evt.target.value)}
+              onKeyDown={(evt) => {
+                if (evt.key === 'Enter') {
+                  onAddRow()
+                }
+              }}
+            />
+            <button type='button' className={styles.actionButton} disabled={isBusy} onClick={onAddRow}>
+              {t('Add case')}
+            </button>
+          </div>
+
+          <div className={styles.searchBox}>
+            <span className={styles.searchIcon}>⌕</span>
+            <input
+              type='text'
+              className={styles.textInput}
+              placeholder={t('Search cases…')}
+              value={searchInput}
+              onChange={(evt) => setSearchInput(evt.target.value)}
+            />
+            {searchInput && (
+              <button
+                type='button'
+                className={styles.clearSearchButton}
+                title={t('Clear search')}
+                onClick={() => setSearchInput('')}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         <div className={styles.grid}>
@@ -404,9 +472,65 @@ export default function CaseTableRoute() {
             </tbody>
           </table>
           {records.length === 0 && (
-            <div className={styles.emptyMessage}>{t('No records yet — add a case above or upload a CSV.')}</div>
+            <div className={styles.emptyMessage}>
+              {search
+                ? t('No cases match "##search##".').replace('##search##', search)
+                : t('No records yet — add a case above or upload a CSV.')}
+            </div>
           )}
         </div>
+
+        {recordCount > 0 && (
+          <div className={styles.pager}>
+            <span className={styles.pagerRange}>
+              {t('##start##–##end## of ##total##')
+                .replace('##start##', String(rangeStart))
+                .replace('##end##', String(rangeEnd))
+                .replace('##total##', String(recordCount))}
+            </span>
+            <div className={styles.pagerButtons}>
+              <button
+                type='button'
+                className={styles.secondaryButton}
+                disabled={page === 0}
+                onClick={() => setPage(0)}
+                title={t('First page')}
+              >
+                «
+              </button>
+              <button
+                type='button'
+                className={styles.secondaryButton}
+                disabled={page === 0}
+                onClick={() => setPage(page - 1)}
+              >
+                {t('Previous')}
+              </button>
+              <span className={styles.pagerPageIndicator}>
+                {t('Page ##page## of ##total##')
+                  .replace('##page##', String(page + 1))
+                  .replace('##total##', String(pageCount))}
+              </span>
+              <button
+                type='button'
+                className={styles.secondaryButton}
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('Next')}
+              </button>
+              <button
+                type='button'
+                className={styles.secondaryButton}
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage(pageCount - 1)}
+                title={t('Last page')}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {historyKey !== null && (

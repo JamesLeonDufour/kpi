@@ -87,8 +87,16 @@ export async function deleteCaseTable(uid: string) {
   return fetchDelete(`${API_ROOT}/case-tables/${uid}/`)
 }
 
-export async function getCaseRecords(tableUid: string, limit = 30000) {
-  return fetchGet<PaginatedResponse<CaseRecord>>(`${API_ROOT}/case-tables/${tableUid}/records/?limit=${limit}`)
+export async function getCaseRecords(
+  tableUid: string,
+  options: { limit?: number; offset?: number; search?: string } = {},
+) {
+  const { limit = 50, offset = 0, search = '' } = options
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (search.trim()) {
+    params.set('search', search.trim())
+  }
+  return fetchGet<PaginatedResponse<CaseRecord>>(`${API_ROOT}/case-tables/${tableUid}/records/?${params.toString()}`)
 }
 
 export async function createCaseRecord(tableUid: string, data: { key: string; data: { [k: string]: string } }) {

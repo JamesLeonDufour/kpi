@@ -85,6 +85,10 @@ class CaseLinkSerializer(serializers.ModelSerializer):
     case_table_detail = CaseTableSerializer(source='case_table', read_only=True)
     asset = serializers.SlugRelatedField(slug_field='uid', read_only=True)
     asset_name = serializers.CharField(source='asset.name', read_only=True)
+    # `CaseLink.filename` is a `@property` (backed by `_filename`), not a
+    # plain model field, so `ModelSerializer` can't auto-introspect it —
+    # declare it explicitly.
+    filename = serializers.CharField(max_length=255, default='cases.csv')
 
     class Meta:
         model = CaseLink
@@ -147,6 +151,32 @@ class CaseLinkSerializer(serializers.ModelSerializer):
             'You can only link case tables that you own, the project owner '
             'owns, or that are shared with your organization'
         )
+
+    def validate(self, attrs):
+        # A project can only be linked to a given case table once (DB has a
+        # matching `unique_together`). Check it here so a duplicate attempt
+        # surfaces as a normal 400, instead of an unhandled `IntegrityError`
+        # crashing the request with a 500.
+        asset = self.context.get('asset')
+        case_table = attrs.get('case_table') or getattr(
+            self.instance, 'case_table', None
+        )
+        if asset is not None and case_table is not None:
+            existing = CaseLink.objects.filter(
+                asset=asset, case_table=case_table
+            )
+            if self.instance is not None:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise serializers.ValidationError(
+                    {
+                        'case_table': (
+                            'This project is already linked to that case '
+                            'table.'
+                        )
+                    }
+                )
+        return attrs
 
 
 class CaseEventSerializer(serializers.ModelSerializer):
