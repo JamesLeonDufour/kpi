@@ -150,28 +150,42 @@ mode"), so no installer changes are needed.
    each column; to let enumerators create a case that doesn't exist yet, gate
    the extra questions on whether `pulldata` found anything:
 
-   | type | name | label | calculation | relevant |
-   |---|---|---|---|---|
-   | text | case_id | Case ID | | |
-   | calculate | known_name | | pulldata('cases', 'name', 'case_id', ${case_id}) | |
-   | calculate | known_status | | pulldata('cases', 'status', 'case_id', ${case_id}) | |
-   | calculate | known_last_visit | | pulldata('cases', 'last_visit', 'case_id', ${case_id}) | |
-   | calculate | case_found | | if(string-length(${known_name}) > 0 or string-length(${known_status}) > 0, 'yes', 'no') | |
-   | note | existing_case | Name: ${known_name} / Status: ${known_status} / Last visit: ${known_last_visit} | | ${case_found} = 'yes' |
-   | note | new_case | No case found for ${case_id} — it will be created. | | ${case_found} = 'no' |
-   | text | name | Name | | ${case_found} = 'no' |
-   | select_one s_opts | status | Status | | |
-   | date | visit_date | Visit date | | |
+   | type | name | label | calculation | relevant | parameters |
+   |---|---|---|---|---|---|
+   | select_one mode_list | mode | Is this an existing case? | | | |
+   | select_one_from_file cases.csv | case_pick | Select the case | | ${mode} = 'existing' | value=case_id,label=name |
+   | text | case_id_new | New case ID | | ${mode} = 'new' | |
+   | calculate | case_id | | if(${mode} = 'existing', ${case_pick}, ${case_id_new}) | | |
+   | calculate | known_name | | pulldata('cases', 'name', 'case_id', ${case_id}) | | |
+   | calculate | known_status | | pulldata('cases', 'status', 'case_id', ${case_id}) | | |
+   | calculate | known_last_visit | | pulldata('cases', 'last_visit', 'case_id', ${case_id}) | | |
+   | note | existing_case | Name: ${known_name} / Status: ${known_status} / Last visit: ${known_last_visit} | | ${mode} = 'existing' | |
+   | note | new_case | ${case_id_new} will be created on submit. | | ${mode} = 'new' | |
+   | text | name_new | Name | | ${mode} = 'new' | |
+   | text | name_fix | Correct the name (optional) | | ${mode} = 'existing' | |
+   | calculate | name | | if(${mode} = 'new', ${name_new}, ${name_fix}) | ${mode} = 'new' or string-length(${name_fix}) > 0 | |
+   | select_one s_opts | status | Status | | | |
+   | date | visit_date | Visit date | | | |
 
-   Making `name` relevant only for a new case is deliberate: a non-relevant
-   question is absent from the submission entirely, so the write-back leaves
-   the stored name untouched for cases that already have one, instead of
-   blanking it. (A question that *is* relevant but left empty submits an empty
-   string and **will** overwrite — see limitations.)
+   Two things are worth copying from this shape.
 
-   Alternatively, `select_one_from_file cases.csv` (with
-   `value=case_id, label=name` in `parameters`) gives a picker of existing
-   cases instead of free text — but then only existing cases can be chosen.
+   **The picker feeds itself from the case table.** `select_one_from_file
+   cases.csv` with `value=case_id,label=name` builds the choice list out of
+   the live CSV, so enumerators pick from the cases that exist at the moment
+   the form is loaded — no choice list to maintain. Keeping a "New case"
+   branch alongside it means unknown ids can still be created; a picker on
+   its own can only ever offer cases that already exist. The `case_id`
+   calculate collapses the two branches into the single value the link's
+   *case id question* points at.
+
+   **`name` is a calculate with a `relevant`, not a plain question.**
+   Write-back maps questions to columns, and a question that is relevant but
+   left blank submits an empty string, which *overwrites* the stored name
+   with nothing. A question that is **not relevant** is absent from the
+   submission and is skipped. So `name` is only relevant when there is
+   actually a name to write — a new case, or a correction that was typed —
+   and an ordinary visit to an existing case leaves the stored name alone.
+   Apply the same pattern to any optional write-back field.
 
    Redeploy the form after changing it.
 
@@ -192,10 +206,16 @@ end to end:
 3. Project **Settings → Case Management → Create link**:
    `cases.csv` / case id question `case_id` / mappings
    `name=name`, `status=status`, `visit_date=last_visit`, both checkboxes on.
-4. Enter `CASE001` in the form → the name, status and last visit on file are
-   displayed. Enter an unknown id such as `CASE900` → the form says the case
-   will be created and asks for the name; submitting creates the record with
-   everything filled in.
+4. Try all three paths:
+   - **Existing case** → the picker lists `Amina Diallo` / `Jean Kouassi` /
+     `Fatou Sow` (labels come from the table's `name` column). Choose one and
+     its name, status and last visit on file are shown. Submit: status and
+     visit date are updated, the name is left as it was.
+   - **Existing case + correction** → type into *Correct the name*; that name
+     replaces the stored one.
+   - **New case** → give an id that isn't in the table (e.g. `CASE900`) and a
+     name; submitting creates the record with the name, status and visit date
+     filled in, and it appears in the picker on the next form load.
 
 ## Troubleshooting
 
