@@ -53,8 +53,12 @@ def sync_case_records(asset_uid: str, submission_id: int):
     if not links or not asset.has_deployment:
         return
 
-    submissions = asset.deployment.get_submissions(
-        user=asset.owner, submission_ids=[submission_id]
+    # `get_submissions()` may return a generator (an empty one when there's
+    # no match, per its docstring) rather than a list, so `if not submissions`
+    # alone never catches the empty case — a generator is always truthy —
+    # and `submissions[0]` isn't valid on a generator anyway. Materialize it.
+    submissions = list(
+        asset.deployment.get_submissions(user=asset.owner, submission_ids=[submission_id])
     )
     if not submissions:
         logging.warning(
