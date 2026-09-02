@@ -146,46 +146,53 @@ mode"), so no installer changes are needed.
    ```
 
 5. In the **XLSForm**, use the file like an attached CSV. `pulldata('cases', …)`
-   uses the filename **without** `.csv`. To show the whole case on file, pull
-   each column; to let enumerators create a case that doesn't exist yet, gate
-   the extra questions on whether `pulldata` found anything:
+   uses the filename **without** `.csv`. The shape below asks for a case id,
+   tells the enumerator whether it is new or known, and pre-fills the editable
+   fields with what is on file:
 
-   | type | name | label | calculation | relevant | parameters |
-   |---|---|---|---|---|---|
-   | select_one mode_list | mode | Is this an existing case? | | | |
-   | select_one_from_file cases.csv | case_pick | Select the case | | ${mode} = 'existing' | value=case_id,label=name |
-   | text | case_id_new | New case ID | | ${mode} = 'new' | |
-   | calculate | case_id | | if(${mode} = 'existing', ${case_pick}, ${case_id_new}) | | |
-   | calculate | known_name | | pulldata('cases', 'name', 'case_id', ${case_id}) | | |
-   | calculate | known_status | | pulldata('cases', 'status', 'case_id', ${case_id}) | | |
-   | calculate | known_last_visit | | pulldata('cases', 'last_visit', 'case_id', ${case_id}) | | |
-   | note | existing_case | Name: ${known_name} / Status: ${known_status} / Last visit: ${known_last_visit} | | ${mode} = 'existing' | |
-   | note | new_case | ${case_id_new} will be created on submit. | | ${mode} = 'new' | |
-   | text | name_new | Name | | ${mode} = 'new' | |
-   | text | name_fix | Correct the name (optional) | | ${mode} = 'existing' | |
-   | calculate | name | | if(${mode} = 'new', ${name_new}, ${name_fix}) | ${mode} = 'new' or string-length(${name_fix}) > 0 | |
-   | select_one s_opts | status | Status | | | |
-   | date | visit_date | Visit date | | | |
+   | type | name | label | calculation | trigger | relevant | parameters |
+   |---|---|---|---|---|---|---|
+   | text | case_id | Case ID | | | | |
+   | calculate | known_name | | pulldata('cases', 'name', 'case_id', ${case_id}) | | | |
+   | calculate | known_status | | pulldata('cases', 'status', 'case_id', ${case_id}) | | | |
+   | calculate | known_last_visit | | pulldata('cases', 'last_visit', 'case_id', ${case_id}) | | | |
+   | calculate | case_found | | if(string-length(${known_name}) > 0 or string-length(${known_status}) > 0, 'yes', 'no') | | | |
+   | note | existing_case | Name on file: ${known_name} … | | | ${case_found} = 'yes' | |
+   | note | new_case | NEW — ${case_id} will be created on submit. | | | ${case_found} = 'no' | |
+   | text | name | Name | pulldata('cases', 'name', 'case_id', ${case_id}) | ${case_id} | | |
+   | select_one s_opts | status | Status | pulldata('cases', 'status', 'case_id', ${case_id}) | ${case_id} | | |
+   | date | visit_date | Visit date | | | | |
+   | select_one_from_file cases.csv | case_browser | Browse cases (demo) | | | | value=case_id,label=name |
 
-   Two things are worth copying from this shape.
+   **Pre-filling an editable field: use `trigger`, not `default`.** A `default`
+   is evaluated once when the form loads — too early, the case id has not been
+   typed yet. Giving a question a `calculation` *and* a `trigger` of
+   `${case_id}` makes pyxform emit
 
-   **The picker feeds itself from the case table.** `select_one_from_file
-   cases.csv` with `value=case_id,label=name` builds the choice list out of
-   the live CSV, so enumerators pick from the cases that exist at the moment
-   the form is loaded — no choice list to maintain. Keeping a "New case"
-   branch alongside it means unknown ids can still be created; a picker on
-   its own can only ever offer cases that already exist. The `case_id`
-   calculate collapses the two branches into the single value the link's
-   *case id question* points at.
+   ```xml
+   <setvalue ref="/data/name" event="xforms-value-changed"
+             value="pulldata('cases', 'name', 'case_id', /data/case_id )"/>
+   ```
 
-   **`name` is a calculate with a `relevant`, not a plain question.**
-   Write-back maps questions to columns, and a question that is relevant but
-   left blank submits an empty string, which *overwrites* the stored name
-   with nothing. A question that is **not relevant** is absent from the
-   submission and is skipped. So `name` is only relevant when there is
-   actually a name to write — a new case, or a correction that was typed —
-   and an ordinary visit to an existing case leaves the stored name alone.
-   Apply the same pattern to any optional write-back field.
+   inside the case id question, so the field is re-read from the case table
+   every time the id changes while staying an ordinary editable question.
+   That is what gives "load the name that is on file, but let me correct it",
+   and it leaves the field blank for an id that does not exist yet.
+
+   Because such a field is always present in the submission, the write-back
+   always writes it — fine here, since it is pre-filled with the stored value,
+   so submitting unchanged is a no-op. But **deliberately clearing it will
+   blank the stored value**. Where a field must never be overwritten by a
+   blank, gate it with `relevant` instead: a non-relevant question is absent
+   from the submission entirely and is skipped by the write-back.
+
+   **`select_one_from_file cases.csv`** (`value=case_id,label=name`) builds a
+   choice list live from the same file, so the options are the cases that
+   exist at form load. It is a good fit when enumerators should only ever pick
+   an existing case — but on its own it cannot introduce a new id, which is
+   why the example keeps a typed `case_id` as the entry point and includes the
+   picker only as a demonstration. It is not mapped to a column, so choosing
+   something there does not touch the case record.
 
    Redeploy the form after changing it.
 
@@ -206,16 +213,17 @@ end to end:
 3. Project **Settings → Case Management → Create link**:
    `cases.csv` / case id question `case_id` / mappings
    `name=name`, `status=status`, `visit_date=last_visit`, both checkboxes on.
-4. Try all three paths:
-   - **Existing case** → the picker lists `Amina Diallo` / `Jean Kouassi` /
-     `Fatou Sow` (labels come from the table's `name` column). Choose one and
-     its name, status and last visit on file are shown. Submit: status and
-     visit date are updated, the name is left as it was.
-   - **Existing case + correction** → type into *Correct the name*; that name
-     replaces the stored one.
-   - **New case** → give an id that isn't in the table (e.g. `CASE900`) and a
-     name; submitting creates the record with the name, status and visit date
-     filled in, and it appears in the picker on the next form load.
+4. Try each path:
+   - **Known case** → type `CASE001`. The form confirms it is on file and
+     pre-fills Name (`Amina Diallo`) and Status from the table. Submit
+     unchanged and nothing about the case changes; edit the Name and the
+     correction is stored.
+   - **New case** → type an id that isn't there, e.g. `CASE900`. The form says
+     **NEW**, the Name field is blank for you to fill in, and submitting
+     creates the record with the name, status and visit date.
+   - **The dropdown at the end** lists the cases currently in the table by
+     name. It is a demonstration of `select_one_from_file` only — it is not
+     written back, so picking something there changes nothing.
 
 ## Troubleshooting
 

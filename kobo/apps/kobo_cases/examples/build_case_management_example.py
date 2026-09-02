@@ -4,31 +4,36 @@ Generates the Case Management demo:
   case_management_example_form.xlsx  — XLSForm to deploy in KoboToolbox
   case_management_example_cases.csv  — case table CSV to upload as a Case Table
 
-The form exercises both directions of the feature, and both ways of reading
-the linked case table:
+Flow: you type a **Case ID**. The form looks it up in the linked case table
+and tells you whether it is new or already on file. Either way the Name and
+Status fields are **pre-filled with what is on file and stay editable**, so an
+existing case can be corrected and a new one filled in from blank. Submitting
+writes the values back onto the case record, creating it if the id was unknown.
 
-  select_one_from_file  — the case picker is fed straight from `cases.csv`,
-                          so enumerators choose from the cases that exist
-                          *right now* (label = the case's name).
-  pulldata()            — once a case is chosen, its name / status / last
-                          visit are pulled in and shown, so the current
-                          state is visible before anything is changed.
-  write-back            — answers are written onto the case record. An id
-                          that isn't in the table yet is created, with the
-                          name entered on the form.
+The pre-filling trick: `trigger`
+--------------------------------
+A `default` is evaluated once when the form loads, which is too early — the
+case id has not been typed yet. Instead these questions carry a `calculation`
+*and* a `trigger` pointing at `${case_id}`. pyxform turns that into
 
-Why `name` is a calculate with a `relevant`
--------------------------------------------
-Write-back maps *questions* to columns, and a question that is relevant but
-left blank submits an empty string, which would overwrite the stored name
-with nothing. A question that is **not relevant** is absent from the
-submission entirely and is skipped by the write-back. So `name` is computed
-from whichever branch applies and is only relevant when there is genuinely a
-name to write:
+    <setvalue event="xforms-value-changed" ref="/data/name" value="pulldata(…)"/>
 
-  * new case                    → the name just entered
-  * existing case, correction   → the corrected name
-  * existing case, no change    → not relevant, stored name left alone
+attached to the case id question, so every time the case id changes the field
+is re-populated from the case table — while remaining an ordinary editable
+question. That is what makes "load the existing name, but let me change it"
+possible.
+
+Because Name is always present in the submission, the write-back always writes
+it. That is intended here (it is pre-filled with the stored value, so an
+unchanged submission is a no-op) — but note that deliberately clearing the
+field will blank the stored name. Where a field must never be overwritten by a
+blank, gate it with `relevant` instead: a non-relevant question is absent from
+the submission and is skipped by the write-back.
+
+The last question is a `select_one_from_file cases.csv` browser. It is not
+mapped to any column and does not affect the case record — it is there to show
+that reading the case table as a choice list works too, with the choices coming
+live from the table.
 
 Link configuration this form expects (project Settings → Case Management):
 
@@ -53,90 +58,94 @@ wb = openpyxl.Workbook()
 survey = wb.active
 survey.title = 'survey'
 survey.append([
-    'type', 'name', 'label', 'calculation', 'relevant', 'required',
-    'parameters', 'appearance',
+    'type', 'name', 'label', 'hint', 'calculation', 'trigger', 'relevant',
+    'required', 'parameters', 'appearance',
 ])
 
 survey.append([
-    'select_one mode_list', 'mode', 'Is this an existing case?', '', '', 'yes',
-    '', 'minimal',
+    'text', 'case_id', 'Case ID',
+    'Type an id that exists (CASE001) or a brand new one (CASE900).',
+    '', '', '', 'yes', '', '',
 ])
 
-# Existing case: the picker reads cases.csv itself, so it always offers the
-# cases that are in the table at the moment the form is loaded.
+# Everything on file for that id. Empty strings when the id is unknown.
 survey.append([
-    'select_one_from_file cases.csv', 'case_pick', 'Select the case', '',
-    "${mode} = 'existing'", 'yes', 'value=case_id,label=name', 'minimal',
-])
-
-# New case: free-text id.
-survey.append([
-    'text', 'case_id_new', 'New case ID', '', "${mode} = 'new'", 'yes', '', '',
-])
-
-# The single id the write-back keys on, whichever branch was used.
-survey.append([
-    'calculate', 'case_id', '',
-    "if(${mode} = 'existing', ${case_pick}, ${case_id_new})", '', '', '', '',
-])
-
-# Everything currently on file for that case.
-survey.append([
-    'calculate', 'known_name', '',
-    "pulldata('cases', 'name', 'case_id', ${case_id})", '', '', '', '',
+    'calculate', 'known_name', '', '',
+    "pulldata('cases', 'name', 'case_id', ${case_id})", '', '', '', '', '',
 ])
 survey.append([
-    'calculate', 'known_status', '',
-    "pulldata('cases', 'status', 'case_id', ${case_id})", '', '', '', '',
+    'calculate', 'known_status', '', '',
+    "pulldata('cases', 'status', 'case_id', ${case_id})", '', '', '', '', '',
 ])
 survey.append([
-    'calculate', 'known_last_visit', '',
+    'calculate', 'known_last_visit', '', '',
     "pulldata('cases', 'last_visit', 'case_id', ${case_id})", '', '', '', '',
+    '',
+])
+survey.append([
+    'calculate', 'case_found', '', '',
+    "if(string-length(${known_name}) > 0 or string-length(${known_status}) > 0 "
+    "or string-length(${known_last_visit}) > 0, 'yes', 'no')",
+    '', '', '', '', '',
 ])
 
+# Tell the enumerator which of the two situations they are in.
 survey.append([
     'note', 'existing_case',
-    '**Case on file — ${case_id}**\n'
-    '- Name: ${known_name}\n'
-    '- Status: ${known_status}\n'
-    '- Last visit: ${known_last_visit}',
-    '', "${mode} = 'existing'", '', '', '',
+    '**Existing case — ${case_id}**\n'
+    '- Name on file: ${known_name}\n'
+    '- Status on file: ${known_status}\n'
+    '- Last visit on file: ${known_last_visit}\n\n'
+    'The fields below are pre-filled; change what you need.',
+    '', '', '', "${case_found} = 'yes'", '', '', '',
 ])
 survey.append([
     'note', 'new_case',
-    '**${case_id_new}** is not in the case table yet — it will be created '
-    'when you submit.',
-    '', "${mode} = 'new'", '', '', '',
+    '**NEW — ${case_id} is not in the case table**\n\n'
+    'It will be created when you submit. Fill in the name below.',
+    '', '', '', "${case_found} = 'no'", '', '', '',
 ])
 
-# Name: required for a new case, optional correction for an existing one.
+# Pre-filled from the case table on every change of ${case_id}, still editable.
 survey.append([
-    'text', 'name_new', 'Name', '', "${mode} = 'new'", 'yes', '', '',
+    'text', 'name', 'Name',
+    'Pre-filled from the case table for a known case; type it in for a new one.',
+    "pulldata('cases', 'name', 'case_id', ${case_id})", '${case_id}', '',
+    'yes', '', '',
 ])
 survey.append([
-    'text', 'name_fix', 'Correct the name (optional)', '',
-    "${mode} = 'existing'", '', '', '',
+    'select_one status_list', 'status', 'Status',
+    'Pre-filled with the status on file.',
+    "pulldata('cases', 'status', 'case_id', ${case_id})", '${case_id}', '',
+    'yes', '', 'minimal',
 ])
 survey.append([
-    'calculate', 'name', '',
-    "if(${mode} = 'new', ${name_new}, ${name_fix})",
-    "${mode} = 'new' or string-length(${name_fix}) > 0", '', '', '',
+    'date', 'visit_date', 'Visit date', '', '', '', '', 'yes', '', '',
+])
+survey.append([
+    'text', 'notes', 'Notes (not written back)', '', '', '', '', '', '', '',
 ])
 
-# Written back for both new and existing cases.
+# --- Demonstration of select_one_from_file -------------------------------
+# Not mapped to any column: picking something here does not touch the case
+# record. It only shows that the same live file also works as a choice list.
 survey.append([
-    'select_one status_list', 'status', 'Status', '', '', 'yes', '', '',
+    'note', 'browser_intro',
+    '---\n**Bonus: the same case table as a dropdown**\n\n'
+    'The list below is built live from `cases.csv` — the same file '
+    '`pulldata()` reads above. It is here only to demonstrate '
+    '`select_one_from_file`; it is not written back.',
+    '', '', '', '', '', '', '',
 ])
-survey.append(['date', 'visit_date', 'Visit date', '', '', 'yes', '', ''])
 survey.append([
-    'text', 'notes', 'Notes (not written back)', '', '', '', '', '',
+    'select_one_from_file cases.csv', 'case_browser',
+    'Browse existing cases (demo only)', '', '', '', '', '',
+    'value=case_id,label=name', 'minimal',
 ])
 
 # --- choices sheet ---
 choices = wb.create_sheet('choices')
 choices.append(['list_name', 'name', 'label'])
-choices.append(['mode_list', 'existing', 'Existing case'])
-choices.append(['mode_list', 'new', 'New case'])
 choices.append(['status_list', 'open', 'Open'])
 choices.append(['status_list', 'in_progress', 'In progress'])
 choices.append(['status_list', 'closed', 'Closed'])
@@ -155,8 +164,7 @@ with open(f'{OUT_DIR}/case_management_example_cases.csv', 'w', newline='') as f:
     writer.writerow(['CASE001', 'Amina Diallo', 'open', '2026-08-01'])
     writer.writerow(['CASE002', 'Jean Kouassi', 'in_progress', '2026-08-10'])
     writer.writerow(['CASE003', 'Fatou Sow', 'closed', '2026-07-15'])
-    # Any id not listed here exercises "create unknown cases automatically":
-    # pick "New case", give it an id and a name, and submitting creates the
-    # record with the name filled in.
+    # Any other id (e.g. CASE900) exercises "create unknown cases
+    # automatically".
 
 print('done')
