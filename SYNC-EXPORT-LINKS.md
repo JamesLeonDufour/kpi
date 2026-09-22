@@ -50,6 +50,12 @@ because the API does not record which setting produced which task. The two
 representations differ in annoying ways, which is why
 `exportSettingsMatchUtils.ts` exists and is unit-tested:
 
+- **`query` gains a `_userform_id` key on the export task.** The saved setting
+  holds the user's own filter (usually `{}`); the back end injects
+  `_userform_id` to scope the export to its form. This one matters most: left
+  in the comparison, *no export ever matches its own setting* and the buttons
+  never appear anywhere. It is stripped from both sides, while any filter the
+  user actually set is still compared.
 - booleans can come back as real booleans or as the strings `'true'` / `'false'`
 - `lang` may be `null`, `false`, `'xml'`, or a language code
 - `fields` / `tag_cols_for_header` arrive in arbitrary order
@@ -57,6 +63,8 @@ representations differ in annoying ways, which is why
 - optional keys are simply absent and must fall back to `DEFAULT_EXPORT_SETTINGS`
 
 Both sides are normalised into a canonical shape and compared with `isEqual`.
+The tests use shapes taken verbatim from a live server, because this is exactly
+the kind of thing that typechecks perfectly and still matches nothing.
 
 ### When the buttons don't appear
 

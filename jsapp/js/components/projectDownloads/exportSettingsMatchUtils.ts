@@ -74,6 +74,22 @@ function normalizeExportLanguage(value: unknown): NormalizedExportSettingsForMat
   return value as NormalizedExportSettingsForMatching['lang']
 }
 
+/**
+ * The saved setting stores only the filter the user chose (usually `{}`), but
+ * the export task's query additionally carries `_userform_id`, injected by the
+ * back end to scope the export to the form it belongs to. Comparing it would
+ * make every export fail to match its own setting, so drop it from both sides.
+ */
+function normalizeQuery(value: unknown): ExportSettingSettings['query'] {
+  if (typeof value !== 'object' || value === null) {
+    return {}
+  }
+
+  const { _userform_id: _ignored, ...rest } = value as Record<string, unknown>
+
+  return rest as ExportSettingSettings['query']
+}
+
 function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) {
     return []
@@ -120,7 +136,7 @@ export function normalizeExportSettingsForMatching(
     include_media_url: normalizeBoolean(data.include_media_url, DEFAULT_EXPORT_SETTINGS.INCLUDE_MEDIA_URL),
     lang: normalizeExportLanguage(data.lang),
     multiple_select: data.multiple_select ?? DEFAULT_EXPORT_SETTINGS.EXPORT_MULTIPLE.value,
-    query: typeof data.query === 'object' && data.query !== null ? data.query : {},
+    query: normalizeQuery(data.query),
     submission_ids: normalizeNumberArray(data.submission_ids),
     tag_cols_for_header: normalizeStringArray(data.tag_cols_for_header ?? ['hxl']),
     type: normalizeExportType(data.type),
