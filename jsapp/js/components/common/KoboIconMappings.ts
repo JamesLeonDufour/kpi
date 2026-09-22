@@ -33,6 +33,8 @@ export const LegacyIconToTablerIconMap: Record<IconName, TablerIcon | undefined>
   'arrow-up': TablerIcons.IconArrowUp,
   attach: TablerIcons.IconPaperclip,
   block: TablerIcons.IconLibrary,
+  // Custom Kobo icon; no Tabler equivalent, so the legacy SVG is used.
+  'case-management': undefined,
   'caret-down': TablerIcons.IconCaretDownFilled,
   'caret-left': TablerIcons.IconCaretLeftFilled,
   'caret-right': TablerIcons.IconCaretRightFilled,

@@ -19,6 +19,7 @@ import ArrowUpRightSvg from '../../../svg-icons/arrow-up-right.svg?react'
 import ArrowUpSvg from '../../../svg-icons/arrow-up.svg?react'
 import AttachSvg from '../../../svg-icons/attach.svg?react'
 import BlockSvg from '../../../svg-icons/block.svg?react'
+import CaseManagementSvg from '../../../svg-icons/case-management.svg?react'
 import CaretDownSvg from '../../../svg-icons/caret-down.svg?react'
 import CaretLeftSvg from '../../../svg-icons/caret-left.svg?react'
 import CaretRightSvg from '../../../svg-icons/caret-right.svg?react'
@@ -251,6 +252,7 @@ export const LegacyIconToSvgComponentMap: Record<IconName, ComponentType<SvgIcon
   'arrow-up-right': wrapLegacySvgIcon(ArrowUpRightSvg),
   attach: wrapLegacySvgIcon(AttachSvg),
   block: wrapLegacySvgIcon(BlockSvg),
+  'case-management': wrapLegacySvgIcon(CaseManagementSvg),
   'caret-down': wrapLegacySvgIcon(CaretDownSvg),
   'caret-left': wrapLegacySvgIcon(CaretLeftSvg),
   'caret-right': wrapLegacySvgIcon(CaretRightSvg),
