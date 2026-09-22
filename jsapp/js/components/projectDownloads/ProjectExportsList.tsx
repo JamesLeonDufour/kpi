@@ -1,6 +1,12 @@
 import { Flex, Text } from '@mantine/core'
+import { useClipboard } from '@mantine/hooks'
 import React, { useEffect, useRef, useState } from 'react'
-import { assetsExportsRetrieve, useAssetsExportsDestroy, useAssetsExportsList } from '#/api/react-query/survey-data'
+import {
+  assetsExportsRetrieve,
+  useAssetsExportSettingsList,
+  useAssetsExportsDestroy,
+  useAssetsExportsList,
+} from '#/api/react-query/survey-data'
 import { getLanguageIndex } from '#/assetUtils'
 import bem from '#/bem'
 import SimpleTable from '#/components/common/SimpleTable'
@@ -9,6 +15,7 @@ import LoadingSpinner from '#/components/common/loadingSpinner'
 import { PERMISSIONS_CODENAMES } from '#/components/permissions/permConstants'
 import { userCan } from '#/components/permissions/utils'
 import ExportFetcher from '#/components/projectDownloads/exportFetcher'
+import { findMatchingExportSettingForExport } from '#/components/projectDownloads/exportSettingsMatchUtils'
 import {
   EXPORT_FORMATS,
   EXPORT_TYPES,
@@ -16,7 +23,7 @@ import {
   type ExportTypeDefinition,
 } from '#/components/projectDownloads/exportsConstants'
 import { openDeleteExportModal } from '#/components/projectDownloads/openDeleteExportModal'
-import type { AssetResponse, ExportDataLang, ExportDataResponse } from '#/dataInterface'
+import type { AssetResponse, ExportDataLang, ExportDataResponse, ExportSetting } from '#/dataInterface'
 import { formatTime, notify } from '#/utils'
 
 interface ProjectExportsListProps {
@@ -34,6 +41,22 @@ export default function ProjectExportsList(props: ProjectExportsListProps) {
   const exportFetchersRef = useRef<Map<string, ExportFetcher>>(new Map())
   const exportsListQuery = useAssetsExportsList(props.asset.uid)
   const deleteExportMutation = useAssetsExportsDestroy()
+  const clipboard = useClipboard({ timeout: 2000 })
+
+  // Synchronous export URLs (`data_url_csv` / `data_url_xlsx`) belong to saved
+  // export *settings*, not to the finished export tasks listed here. Exporting
+  // from the UI saves a setting first, so an export can usually be traced back
+  // to the setting that produced it — see `exportSettingsMatchUtils`.
+  const exportSettingsQuery = useAssetsExportSettingsList(props.asset.uid)
+  const exportSettings: ExportSetting[] =
+    exportSettingsQuery.isSuccess && exportSettingsQuery.data.status === 200
+      ? (exportSettingsQuery.data.data.results as unknown as ExportSetting[])
+      : []
+
+  function copySyncLink(url: string, formatLabel: string) {
+    clipboard.copy(url)
+    notify(t('##format## sync link copied to clipboard').replace('##format##', formatLabel))
+  }
 
   function stopExportFetcher(exportUid: string) {
     const exportFetcher = exportFetchersRef.current.get(exportUid)
@@ -180,6 +203,7 @@ export default function ProjectExportsList(props: ProjectExportsListProps) {
   function getRows() {
     return rows.map((exportData) => {
       const exportType = exportData.data.type
+      const matchingExportSetting = findMatchingExportSettingForExport(exportData, exportSettings)
 
       return [
         EXPORT_TYPES[exportType]?.label || t('Unknown format'),
@@ -192,6 +216,33 @@ export default function ProjectExportsList(props: ProjectExportsListProps) {
           {renderBooleanAnswer(exportData.data.fields_from_all_versions)}
         </Text>,
         <Flex gap='xs' justify='flex-end' align='center' direction='row' wrap='nowrap' key='buttons'>
+          {/*
+            Sync links regenerate the export on every request, so they can be
+            pasted straight into Excel / Power BI / Google Sheets as a live
+            data source. Only shown when this export can be traced back to a
+            saved export setting, since that is what the URL belongs to.
+          */}
+          {matchingExportSetting && (
+            <React.Fragment>
+              <Button
+                type='text'
+                size='m'
+                startIcon='link'
+                label={t('CSV')}
+                tooltip={t('Copy synchronous CSV link')}
+                onClick={() => copySyncLink(matchingExportSetting.data_url_csv, 'CSV')}
+              />
+              <Button
+                type='text'
+                size='m'
+                startIcon='link'
+                label={t('XLSX')}
+                tooltip={t('Copy synchronous XLSX link')}
+                onClick={() => copySyncLink(matchingExportSetting.data_url_xlsx, 'XLSX')}
+              />
+            </React.Fragment>
+          )}
+
           {exportData.status === ExportStatusName.complete && (
             <Button
               type='secondary'

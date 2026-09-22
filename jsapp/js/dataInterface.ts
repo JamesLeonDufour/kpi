@@ -1151,6 +1151,9 @@ export interface ExportDataResponse {
     /** Is defined when report is ready. */
     processing_time_seconds?: number
     fields_from_all_versions: boolean
+    query?: MongoQuery
+    submission_ids?: number[]
+    tag_cols_for_header?: string[]
     flatten?: boolean
   }
 }
